@@ -64,6 +64,26 @@ services:
       retries: 12
       start_period: 20s
 
+  kafka-init:
+    image: apache/kafka:4.3.1
+    container_name: riskflow1-kafka-init
+    restart: "no"
+    entrypoint: ["/opt/kafka/bin/kafka-topics.sh"]
+    command:
+      - --bootstrap-server
+      - kafka:19092
+      - --create
+      - --if-not-exists
+      - --topic
+      - ${KAFKA_TOPIC:-payments.created}
+      - --partitions
+      - "3"
+      - --replication-factor
+      - "1"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   redis:
     image: redis:8-alpine
     container_name: riskflow1-redis
@@ -83,6 +103,7 @@ services:
     build:
       context: .
       dockerfile: services/payment-api/Dockerfile
+      target: payment-api
     container_name: riskflow1-payment-api
     restart: unless-stopped
     environment:
@@ -103,6 +124,27 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+  outbox-publisher:
+    build:
+      context: .
+      dockerfile: services/payment-api/Dockerfile
+      target: outbox-publisher
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      KAFKA_BROKERS: kafka:19092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-payments.created}
+      OUTBOX_POLL_INTERVAL: ${OUTBOX_POLL_INTERVAL:-250ms}
+      OUTBOX_PUBLISH_TIMEOUT: ${OUTBOX_PUBLISH_TIMEOUT:-5s}
+      OUTBOX_RETRY_MIN_BACKOFF: ${OUTBOX_RETRY_MIN_BACKOFF:-100ms}
+      OUTBOX_RETRY_MAX_BACKOFF: ${OUTBOX_RETRY_MAX_BACKOFF:-5s}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:

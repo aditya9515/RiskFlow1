@@ -85,6 +85,20 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:8080/v1/payments/$paymentID
 
 A stored payment returns `200 OK`. A valid UUID with no corresponding payment returns the typed error `payment_not_found` with `404 Not Found`. A malformed UUID returns `invalid_payment_id` with `400 Bad Request` without querying PostgreSQL.
 
+## Outbox publisher
+
+The `outbox-publisher` is a separate Go process. It claims one unpublished row with PostgreSQL `FOR UPDATE SKIP LOCKED`, publishes a versioned envelope to the `payments.created` Kafka topic, and sets `published_at` only after Kafka acknowledges the record.
+
+The Kafka record key is the payment ID, which keeps events for one payment on the same partition. Delivery is at least once: a crash after Kafka accepts a record but before PostgreSQL commits can cause the same `event_id` to be delivered again. Consumers must therefore store or otherwise deduplicate processed event IDs.
+
+The envelope contains `event_id`, `event_type`, `aggregate_id`, `schema_version`, `occurred_at`, `trace_id`, and the domain `payload` object. Kafka failures leave the outbox row unpublished and are retried with exponential backoff capped by `OUTBOX_RETRY_MAX_BACKOFF`.
+
+PostgreSQL row locks allow multiple publisher processes to share the backlog safely:
+
+```powershell
+docker compose up -d --scale outbox-publisher=2
+```
+
 ## Go verification
 
 ```powershell
@@ -93,7 +107,7 @@ go vet ./...
 go mod tidy
 go test ./...
 $env:TEST_DATABASE_URL = "postgres://riskflow:your_local_password@localhost:5432/riskflow?sslmode=disable"
-go test -tags=integration -count=1 ./...
+go test -tags=integration -count=1 -p=1 ./...
 go build ./...
 Pop-Location
 ```
