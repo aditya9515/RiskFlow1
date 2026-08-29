@@ -19,6 +19,8 @@ class JSONFormatter(logging.Formatter):
             "payment_id",
             "decision",
             "risk_score",
+            "model_version",
+            "model_review_threshold",
             "topic",
             "partition",
             "offset",

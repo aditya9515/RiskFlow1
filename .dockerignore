@@ -4,3 +4,8 @@
 .audit-gocache
 coverage.out
 bin
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/build

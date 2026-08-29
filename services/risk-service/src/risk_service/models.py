@@ -79,8 +79,13 @@ class RiskDecisionPayload(EventModel):
     source_event_id: UUID
     decision: Decision
     risk_score: Annotated[StrictInt, Field(ge=0, le=100)]
+    rule_score: Annotated[StrictInt, Field(ge=0, le=100)]
+    model_score: Annotated[StrictInt, Field(ge=0, le=100)]
+    model_probability: Annotated[float, Field(ge=0, le=1)]
+    model_review_threshold: Annotated[float, Field(gt=0, lt=1)]
     reason_codes: Annotated[tuple[str, ...], Field(min_length=1)]
     rule_version: Literal["rules-v1"]
+    model_version: NonEmptyText
     decision_at: datetime
     features: FeatureSnapshot
 
@@ -94,7 +99,7 @@ class RiskDecisionEnvelope(EventModel):
     event_id: UUID
     event_type: Literal["risk.decision.completed"]
     aggregate_id: UUID
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     occurred_at: datetime
     trace_id: UUID
     payload: RiskDecisionPayload

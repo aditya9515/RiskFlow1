@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from os import environ
+from pathlib import Path
 
 
 class ConfigurationError(ValueError):
@@ -30,6 +31,8 @@ class Settings:
     block_threshold: int
     risky_merchant_ids: frozenset[str]
     high_risk_countries: frozenset[str]
+    model_path: Path
+    model_metadata_path: Path
     log_level: str
 
     @classmethod
@@ -65,6 +68,16 @@ class Settings:
             risky_merchant_ids=_csv_set(source.get("RISKY_MERCHANT_IDS", "")),
             high_risk_countries=frozenset(
                 item.upper() for item in _csv_set(source.get("HIGH_RISK_COUNTRIES", ""))
+            ),
+            model_path=Path(
+                _text(source, "ML_MODEL_PATH", "artifacts/risk_model_xgb_synthetic_v1.json")
+            ),
+            model_metadata_path=Path(
+                _text(
+                    source,
+                    "ML_MODEL_METADATA_PATH",
+                    "artifacts/risk_model_xgb_synthetic_v1.metadata.json",
+                )
             ),
             log_level=_text(source, "LOG_LEVEL", "info").upper(),
         )

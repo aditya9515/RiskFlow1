@@ -8,6 +8,7 @@ from typing import Any
 
 from risk_service.config import Settings
 from risk_service.kafka_worker import RiskWorker
+from risk_service.model import ModelScore
 from risk_service.models import FeatureSnapshot, PaymentCreatedEnvelope
 from risk_service.processor import DecisionProcessor
 from risk_service.rules import RuleEngine
@@ -88,6 +89,16 @@ class FixedFeatureStore:
         return self._snapshot
 
 
+class FixedRiskModel:
+    def score(self, _payment: object, _features: object) -> ModelScore:
+        return ModelScore(
+            probability=0.02,
+            risk_score=2,
+            review_threshold=0.1,
+            model_version="xgb-test-v1",
+        )
+
+
 def build_worker(
     settings: Settings,
     decision_time: datetime,
@@ -97,6 +108,7 @@ def build_worker(
     processor = DecisionProcessor(
         FixedFeatureStore(decision_time),
         RuleEngine(settings),
+        FixedRiskModel(),
         now=lambda: decision_time,
     )
     return RiskWorker(settings, consumer, producer, processor)
@@ -118,6 +130,8 @@ def test_valid_decision_is_published_before_offset_commit(
     assert producer.records[0][0] == "risk.decisions"
     output = json.loads(producer.records[0][2])
     assert output["payload"]["source_event_id"] == str(payment_event.event_id)
+    assert output["schema_version"] == 2
+    assert output["payload"]["model_version"] == "xgb-test-v1"
 
 
 def test_invalid_event_is_quarantined_before_offset_commit(

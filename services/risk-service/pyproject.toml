@@ -5,18 +5,25 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "riskflow-risk-service"
 version = "0.1.0"
-description = "Deterministic real-time risk decision worker for RiskFlow"
+description = "Rules and ML real-time risk decision worker for RiskFlow"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "confluent-kafka==2.15.0",
+    "numpy==2.5.2",
     "pydantic==2.13.5",
     "redis==8.1.0",
+    "xgboost==3.4.1; sys_platform == 'win32'",
+    "xgboost-cpu==3.4.1; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
+training = [
+    "scikit-learn==1.9.0",
+]
 dev = [
     "pytest==9.1.1",
     "ruff==0.16.5",
+    "scikit-learn==1.9.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -1,0 +1,84 @@
+{
+  "artifact_sha256": "3f30aaf2a4a7d720c183bab36439a7d40e92b18f82df9f8134da6fe8be32a111",
+  "best_iteration": 89,
+  "feature_names": [
+    "log_amount_minor",
+    "velocity_5m",
+    "new_device",
+    "cross_border"
+  ],
+  "model_parameters": {
+    "alpha": 0.1,
+    "colsample_bytree": 0.9,
+    "eta": 0.05,
+    "eval_metric": "logloss",
+    "lambda": 2.0,
+    "max_depth": 4,
+    "min_child_weight": 5,
+    "nthread": 1,
+    "objective": "binary:logistic",
+    "seed": 20260830,
+    "subsample": 0.85,
+    "tree_method": "hist"
+  },
+  "model_type": "XGBoost binary classifier",
+  "model_version": "xgb-synthetic-v1",
+  "preprocessing_version": "ml-features-v1",
+  "review_threshold": 0.05,
+  "schema_version": 1,
+  "test_metrics": {
+    "business_cost": 119400.0,
+    "business_cost_per_1000": 11940.0,
+    "confusion_matrix": {
+      "false_negative": 179,
+      "false_positive": 1196,
+      "true_negative": 8441,
+      "true_positive": 184
+    },
+    "f1": 0.21113,
+    "pr_auc": 0.198821,
+    "precision": 0.133333,
+    "recall": 0.506887,
+    "roc_auc": 0.764561
+  },
+  "threshold_selection": {
+    "false_negative_cost": 500.0,
+    "false_positive_cost": 25.0,
+    "selected_on": "validation",
+    "validation_cost": 108600.0
+  },
+  "training": {
+    "data_source": "synthetic",
+    "generator_version": "synthetic-payments-v1",
+    "positive_rate": 0.03628,
+    "samples": 50000,
+    "seed": 20260830,
+    "split": {
+      "test": 10000,
+      "train": 30000,
+      "validation": 10000
+    },
+    "synthetic_data_notice": "Metrics describe reproducible fictional data and are not banking performance."
+  },
+  "training_config": {
+    "boosting_rounds": 300,
+    "early_stopping_rounds": 25,
+    "false_negative_cost": 500.0,
+    "false_positive_cost": 25.0,
+    "samples": 50000,
+    "seed": 20260830
+  },
+  "validation_metrics": {
+    "confusion_matrix": {
+      "false_negative": 157,
+      "false_positive": 1204,
+      "true_negative": 8433,
+      "true_positive": 206
+    },
+    "f1": 0.232375,
+    "pr_auc": 0.19663,
+    "precision": 0.146099,
+    "recall": 0.567493,
+    "roc_auc": 0.791173
+  }
+}

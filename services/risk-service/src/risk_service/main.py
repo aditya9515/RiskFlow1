@@ -10,6 +10,7 @@ from risk_service.config import ConfigurationError, Settings
 from risk_service.features import RedisFeatureStore
 from risk_service.kafka_worker import RiskWorker, SynchronousKafkaProducer
 from risk_service.logging_json import configure_logging
+from risk_service.model import XGBoostRiskModel
 from risk_service.processor import DecisionProcessor
 from risk_service.rules import RuleEngine
 
@@ -44,7 +45,15 @@ def main() -> int:
     producer = SynchronousKafkaProducer(settings)
     try:
         feature_store.ping()
-        processor = DecisionProcessor(feature_store, RuleEngine(settings))
+        risk_model = XGBoostRiskModel(settings.model_path, settings.model_metadata_path)
+        logger.info(
+            "risk model loaded",
+            extra={
+                "model_version": risk_model.model_version,
+                "model_review_threshold": risk_model.review_threshold,
+            },
+        )
+        processor = DecisionProcessor(feature_store, RuleEngine(settings), risk_model)
         worker = RiskWorker.build(settings, producer, processor)
         worker.run(stop_event)
     except Exception:

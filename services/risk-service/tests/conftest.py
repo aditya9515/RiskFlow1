@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import shutil
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -46,6 +48,16 @@ def payment_event(event_data: dict[str, Any]) -> PaymentCreatedEnvelope:
 @pytest.fixture
 def decision_time() -> datetime:
     return datetime(2026, 8, 30, 8, 0, 1, tzinfo=UTC)
+
+
+@pytest.fixture
+def workspace_tmp_path() -> Path:
+    path = Path("build") / "pytest" / str(uuid4())
+    path.mkdir(parents=True)
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 def with_event_id(event: PaymentCreatedEnvelope, value: int) -> PaymentCreatedEnvelope:

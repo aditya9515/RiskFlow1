@@ -6,8 +6,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY services/risk-service/pyproject.toml ./
 COPY services/risk-service/src ./src
+COPY services/risk-service/artifacts ./artifacts
 
 RUN pip install --no-cache-dir . \
     && addgroup --system riskflow \

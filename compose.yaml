@@ -151,7 +151,7 @@ services:
       PAYMENTS_TOPIC: ${KAFKA_TOPIC:-payments.created}
       RISK_DECISIONS_TOPIC: ${RISK_DECISIONS_TOPIC:-risk.decisions}
       RISK_INVALID_EVENTS_TOPIC: ${RISK_INVALID_EVENTS_TOPIC:-risk.invalid-events}
-      RISK_CONSUMER_GROUP: ${RISK_CONSUMER_GROUP:-riskflow-deterministic-rules-v1}
+      RISK_CONSUMER_GROUP: ${RISK_CONSUMER_GROUP:-riskflow-risk-ensemble-v2}
       REDIS_URL: redis://redis:6379/0
       REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-riskflow:risk:v1}
       RISK_POLL_TIMEOUT: ${RISK_POLL_TIMEOUT:-1}
@@ -166,6 +166,8 @@ services:
       BLOCK_THRESHOLD: ${BLOCK_THRESHOLD:-70}
       RISKY_MERCHANT_IDS: ${RISKY_MERCHANT_IDS:-}
       HIGH_RISK_COUNTRIES: ${HIGH_RISK_COUNTRIES:-}
+      ML_MODEL_PATH: ${ML_MODEL_PATH:-/app/artifacts/risk_model_xgb_synthetic_v1.json}
+      ML_MODEL_METADATA_PATH: ${ML_MODEL_METADATA_PATH:-/app/artifacts/risk_model_xgb_synthetic_v1.metadata.json}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       kafka-init:

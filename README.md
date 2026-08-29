@@ -1,6 +1,6 @@
 # RiskFlow
 
-RiskFlow is a real-time payment risk and ML decisioning platform. The payment core provides validated, idempotent payment creation backed by a PostgreSQL transaction and transactional outbox. A Python worker consumes those events, maintains online Redis features, and publishes explainable deterministic risk decisions.
+RiskFlow is a real-time payment risk and ML decisioning platform. The payment core provides validated, idempotent payment creation backed by a PostgreSQL transaction and transactional outbox. A Python worker consumes those events, maintains online Redis features, combines deterministic rules with a versioned XGBoost model, and publishes explainable risk decisions.
 
 ## Requirements
 
@@ -11,7 +11,7 @@ RiskFlow is a real-time payment risk and ML decisioning platform. The payment co
 
 ## Local configuration
 
-Docker Compose reads `.env`; the Go application does not. Environment variables are the application's only configuration source.
+Docker Compose reads `.env`; the Go and Python applications do not load it directly. Environment variables are the applications' only configuration source.
 
 ```powershell
 Copy-Item .env.example .env
@@ -115,7 +115,7 @@ PostgreSQL row locks allow multiple publisher processes to share the backlog saf
 docker compose up -d --scale outbox-publisher=2
 ```
 
-## Deterministic risk worker
+## Rules and ML risk worker
 
 The Python `risk-service` validates `payments.created` envelopes before using them. It atomically records each source `event_id` and updates customer velocity, seen-device, and first-observed-country features in Redis. A replay returns the cached feature snapshot instead of incrementing velocity twice.
 
@@ -128,6 +128,10 @@ Rules produce `ALLOW`, `REVIEW`, or `BLOCK`, a score from 0 to 100, readable rea
 - explicitly configured merchant IDs and countries.
 
 `RISKY_MERCHANT_IDS` and `HIGH_RISK_COUNTRIES` default to empty because the project has no authoritative risk list. Failure-history rules are intentionally deferred until a trustworthy failure/decision history exists. The first observed country is an online heuristic, not verified customer residency.
+
+The second layer loads `xgb-synthetic-v1`. It scores the same amount, velocity, device, and cross-border features used during training. A model score above its validation-selected threshold may escalate `ALLOW` to `REVIEW`; only rules can directly `BLOCK`. Each schema-v2 decision includes the final score, rule score, model score and probability, threshold, reason codes, rule version, and model version.
+
+The model was trained on 50,000 reproducible fictional payments with a 60/20/20 train/validation/test split. Its measured synthetic test results are precision `0.133333`, recall `0.506887`, F1 `0.211130`, PR-AUC `0.198821`, and ROC-AUC `0.764561`. These are synthetic-data engineering results, not real banking performance. See [the model documentation](docs/ml-model.md) for the cost assumptions, confusion matrix, artifact hashes, reproduction command, and limitations.
 
 The decision is published to `risk.decisions` before the input Kafka offset is committed. A crash in between can publish a duplicate, so each output uses a deterministic decision `event_id` derived from the input `event_id`; downstream consumers must deduplicate it. Invalid event contracts are published to `risk.invalid-events` before their offsets are committed, preventing a poison record from blocking its partition without silently discarding it.
 
@@ -144,7 +148,14 @@ $env:TEST_REDIS_URL = "redis://localhost:6379/15"
 Pop-Location
 ```
 
-The XGBoost model, trained artifact, and evaluated ML thresholds are not part of this deterministic checkpoint and are not claimed here.
+Reproduce the versioned model from `services/risk-service`:
+
+```powershell
+& .\.venv\Scripts\python.exe -m risk_service.training `
+    --output-dir artifacts `
+    --samples 50000 `
+    --seed 20260830
+```
 
 ## Go verification
 

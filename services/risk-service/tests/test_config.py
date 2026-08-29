@@ -10,6 +10,7 @@ def test_defaults_are_valid() -> None:
     assert settings.redis_url == "redis://localhost:6379/0"
     assert settings.review_threshold == 40
     assert settings.block_threshold == 70
+    assert settings.model_path.name == "risk_model_xgb_synthetic_v1.json"
 
 
 @pytest.mark.parametrize(
