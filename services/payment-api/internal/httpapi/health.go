@@ -23,12 +23,19 @@ type errorResponse struct {
 
 // APIError is the stable JSON error shape returned by the HTTP API.
 type APIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string            `json:"code"`
+	Message string            `json:"message"`
+	Fields  map[string]string `json:"fields,omitempty"`
 }
 
 // NewHandler builds the API routes with their required dependencies.
-func NewHandler(pinger Pinger, readinessTimeout time.Duration, logger *slog.Logger) http.Handler {
+func NewHandler(
+	pinger Pinger,
+	paymentCreator PaymentCreator,
+	readinessTimeout time.Duration,
+	paymentTimeout time.Duration,
+	logger *slog.Logger,
+) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -54,6 +61,7 @@ func NewHandler(pinger Pinger, readinessTimeout time.Duration, logger *slog.Logg
 
 		writeJSON(w, http.StatusOK, statusResponse{Status: "ready"})
 	})
+	mux.Handle("POST /v1/payments", createPaymentHandler(paymentCreator, paymentTimeout, logger))
 
 	return mux
 }

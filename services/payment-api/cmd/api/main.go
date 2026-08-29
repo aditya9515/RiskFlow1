@@ -10,6 +10,7 @@ import (
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/config"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/database"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/httpapi"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/payment"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/server"
 )
 
@@ -39,7 +40,9 @@ func run() int {
 	}
 	defer pool.Close()
 
-	handler := httpapi.NewHandler(pool, cfg.ReadinessTimeout, logger)
+	paymentRepository := payment.NewPostgresRepository(pool)
+	paymentService := payment.NewService(paymentRepository)
+	handler := httpapi.NewHandler(pool, paymentService, cfg.ReadinessTimeout, cfg.PaymentTimeout, logger)
 	httpServer := server.New(cfg.HTTPAddr, handler, cfg.ShutdownTimeout, logger)
 
 	logger.Info("starting payment API", slog.String("address", cfg.HTTPAddr))

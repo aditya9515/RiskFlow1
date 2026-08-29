@@ -23,6 +23,9 @@ func TestLoadValidDefaults(t *testing.T) {
 	if cfg.ReadinessTimeout != time.Second {
 		t.Fatalf("ReadinessTimeout = %s, want 1s", cfg.ReadinessTimeout)
 	}
+	if cfg.PaymentTimeout != 3*time.Second {
+		t.Fatalf("PaymentTimeout = %s, want 3s", cfg.PaymentTimeout)
+	}
 	if cfg.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("ShutdownTimeout = %s, want 10s", cfg.ShutdownTimeout)
 	}
@@ -59,6 +62,13 @@ func TestLoadRejectsInvalidDurations(t *testing.T) {
 			env: map[string]string{
 				"DATABASE_URL":      "postgres://localhost/riskflow",
 				"READINESS_TIMEOUT": "0s",
+			},
+		},
+		{
+			name: "invalid payment timeout",
+			env: map[string]string{
+				"DATABASE_URL":           "postgres://localhost/riskflow",
+				"PAYMENT_CREATE_TIMEOUT": "eventually",
 			},
 		},
 		{

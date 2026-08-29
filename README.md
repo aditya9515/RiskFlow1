@@ -1,6 +1,6 @@
 # RiskFlow
 
-RiskFlow is a real-time payment risk and ML decisioning platform. Checkpoint 1A establishes the reliable Go service foundation, PostgreSQL migrations, Kafka and Redis infrastructure, and independently meaningful liveness and readiness checks.
+RiskFlow is a real-time payment risk and ML decisioning platform. The payment core provides validated, idempotent payment creation backed by a PostgreSQL transaction and transactional outbox.
 
 ## Requirements
 
@@ -49,6 +49,31 @@ Invoke-RestMethod http://localhost:8080/readyz
 - `/healthz` reports whether the API process is alive and never queries PostgreSQL.
 - `/readyz` reports whether PostgreSQL can answer within the configured readiness timeout.
 
+## Create a payment
+
+Amounts use integer minor units, so `1250` means USD 12.50 rather than a floating-point value.
+
+```powershell
+$headers = @{
+    "Idempotency-Key" = "checkout-2026-0001"
+    "Content-Type" = "application/json"
+}
+$body = @{
+    customer_id = "customer-1"
+    merchant_id = "merchant-1"
+    device_id = "device-1"
+    amount_minor = 1250
+    currency = "USD"
+    country = "IN"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/payments -Headers $headers -Body $body
+```
+
+The first request returns `201 Created`. Repeating the normalized payment with the same key returns `200 OK` and the original payment ID. Reusing the key for different payment fields returns a typed `409 Conflict`.
+
+The request fingerprint is SHA-256 over validated, normalized fields in a fixed order; insignificant JSON whitespace, object-key order, and lowercase currency/country codes do not change it.
+
 ## Go verification
 
 ```powershell
@@ -56,6 +81,8 @@ Push-Location services/payment-api
 go vet ./...
 go mod tidy
 go test ./...
+$env:TEST_DATABASE_URL = "postgres://riskflow:your_local_password@localhost:5432/riskflow?sslmode=disable"
+go test -tags=integration -count=1 ./...
 go build ./...
 Pop-Location
 ```

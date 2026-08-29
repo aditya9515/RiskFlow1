@@ -13,6 +13,7 @@ import (
 const (
 	defaultHTTPAddr         = ":8080"
 	defaultReadinessTimeout = time.Second
+	defaultPaymentTimeout   = 3 * time.Second
 	defaultShutdownTimeout  = 10 * time.Second
 )
 
@@ -21,6 +22,7 @@ type Config struct {
 	DatabaseURL      string
 	HTTPAddr         string
 	ReadinessTimeout time.Duration
+	PaymentTimeout   time.Duration
 	ShutdownTimeout  time.Duration
 	LogLevel         slog.Level
 }
@@ -48,6 +50,11 @@ func load(lookup lookupEnv) (Config, error) {
 		return Config{}, err
 	}
 
+	paymentTimeout, err := duration(lookup, "PAYMENT_CREATE_TIMEOUT", defaultPaymentTimeout)
+	if err != nil {
+		return Config{}, err
+	}
+
 	shutdownTimeout, err := duration(lookup, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout)
 	if err != nil {
 		return Config{}, err
@@ -62,6 +69,7 @@ func load(lookup lookupEnv) (Config, error) {
 		DatabaseURL:      databaseURL,
 		HTTPAddr:         httpAddr,
 		ReadinessTimeout: readinessTimeout,
+		PaymentTimeout:   paymentTimeout,
 		ShutdownTimeout:  shutdownTimeout,
 		LogLevel:         logLevel,
 	}, nil

@@ -27,7 +27,7 @@ func TestHealthReturnsOKWithoutDatabasePing(t *testing.T) {
 	t.Parallel()
 
 	pinger := &fakePinger{}
-	handler := NewHandler(pinger, time.Second, discardLogger())
+	handler := NewHandler(pinger, nil, time.Second, 3*time.Second, discardLogger())
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
@@ -49,7 +49,7 @@ func TestReadyReturnsOKWhenDatabasePingSucceeds(t *testing.T) {
 	t.Parallel()
 
 	pinger := &fakePinger{}
-	handler := NewHandler(pinger, time.Second, discardLogger())
+	handler := NewHandler(pinger, nil, time.Second, 3*time.Second, discardLogger())
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 
@@ -71,7 +71,7 @@ func TestReadyReturnsTypedErrorWhenDatabasePingFails(t *testing.T) {
 	t.Parallel()
 
 	pinger := &fakePinger{err: errors.New("database offline")}
-	handler := NewHandler(pinger, time.Second, discardLogger())
+	handler := NewHandler(pinger, nil, time.Second, 3*time.Second, discardLogger())
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 
