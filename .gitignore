@@ -1,0 +1,19 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Go build, test, and coverage artifacts
+bin/
+coverage.out
+*.test
+
+# Local caches
+.audit-gocache/
+.cache/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
