@@ -134,6 +134,26 @@ func TestNewWorkerRejectsInvalidConfiguration(t *testing.T) {
 	}
 }
 
+func TestWorkerClassifiesUnsupportedEventAsPermanent(t *testing.T) {
+	t.Parallel()
+
+	publisher := &capturingPublisher{}
+	worker, err := NewWorker(&scriptedStore{}, publisher, validWorkerConfig(), discardOutboxLogger())
+	if err != nil {
+		t.Fatalf("new worker: %v", err)
+	}
+	event := validEvent()
+	event.EventType = "unsupported.event"
+
+	err = worker.publish(context.Background(), event)
+	if err == nil || !isPermanent(err) {
+		t.Fatalf("error = %v, want permanent delivery error", err)
+	}
+	if publisher.calls != 0 {
+		t.Fatalf("publisher calls = %d, want 0", publisher.calls)
+	}
+}
+
 func validWorkerConfig() WorkerConfig {
 	return WorkerConfig{
 		Topic:          "payments.created",

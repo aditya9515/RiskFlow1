@@ -69,7 +69,11 @@ func (w *Worker) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			w.logger.ErrorContext(ctx, "outbox publish attempt failed",
+			message := "outbox publish attempt failed"
+			if isPermanent(err) {
+				message = "outbox event quarantined"
+			}
+			w.logger.ErrorContext(ctx, message,
 				slog.String("error", err.Error()),
 				slog.Duration("retry_in", retryDelay),
 			)
@@ -88,9 +92,13 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func (w *Worker) publish(ctx context.Context, event Event) error {
+	if event.EventType != paymentsCreatedEventType {
+		return permanent(fmt.Errorf("unsupported event_type %q", event.EventType))
+	}
+
 	value, err := marshalEnvelope(event)
 	if err != nil {
-		return err
+		return permanent(err)
 	}
 
 	message := Message{

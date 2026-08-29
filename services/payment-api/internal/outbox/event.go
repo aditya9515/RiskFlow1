@@ -10,15 +10,39 @@ import (
 	"time"
 )
 
+const paymentsCreatedEventType = "payments.created"
+
 // Event is the durable PostgreSQL representation of an integration event.
 type Event struct {
-	ID            string
-	EventType     string
-	AggregateID   string
-	SchemaVersion int
-	OccurredAt    time.Time
-	TraceID       string
-	Payload       json.RawMessage
+	ID               string
+	EventType        string
+	AggregateID      string
+	SchemaVersion    int
+	OccurredAt       time.Time
+	TraceID          string
+	Payload          json.RawMessage
+	DeliveryAttempts int
+}
+
+type permanentDeliveryError struct {
+	cause error
+}
+
+func (e *permanentDeliveryError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *permanentDeliveryError) Unwrap() error {
+	return e.cause
+}
+
+func permanent(err error) error {
+	return &permanentDeliveryError{cause: err}
+}
+
+func isPermanent(err error) bool {
+	var target *permanentDeliveryError
+	return errors.As(err, &target)
 }
 
 // Envelope is the stable message contract written to Kafka.

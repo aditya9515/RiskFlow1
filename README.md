@@ -93,6 +93,21 @@ The Kafka record key is the payment ID, which keeps events for one payment on th
 
 The envelope contains `event_id`, `event_type`, `aggregate_id`, `schema_version`, `occurred_at`, `trace_id`, and the domain `payload` object. Kafka failures leave the outbox row unpublished and are retried with exponential backoff capped by `OUTBOX_RETRY_MAX_BACKOFF`.
 
+Delivery state is stored on each outbox row. `delivery_attempts`, `last_attempt_at`, `last_error`, and `next_attempt_at` make failures observable and ensure retry timing survives a worker restart. Transient broker failures are retried indefinitely rather than discarded. Structurally invalid or unsupported events are quarantined with `dead_lettered_at` so they cannot block valid events behind them.
+
+Useful operational queries:
+
+```sql
+SELECT COUNT(*) AS pending_events
+FROM outbox_events
+WHERE published_at IS NULL AND dead_lettered_at IS NULL;
+
+SELECT id, event_type, delivery_attempts, last_error, dead_lettered_at
+FROM outbox_events
+WHERE dead_lettered_at IS NOT NULL
+ORDER BY dead_lettered_at DESC;
+```
+
 PostgreSQL row locks allow multiple publisher processes to share the backlog safely:
 
 ```powershell

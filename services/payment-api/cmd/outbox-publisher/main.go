@@ -43,8 +43,14 @@ func run() int {
 	}
 	defer publisher.Close()
 
+	store, err := outbox.NewPostgresStore(pool, cfg.RetryMin, cfg.RetryMax)
+	if err != nil {
+		logger.Error("create outbox store", slog.String("error", err.Error()))
+		return 1
+	}
+
 	worker, err := outbox.NewWorker(
-		outbox.NewPostgresStore(pool),
+		store,
 		publisher,
 		outbox.WorkerConfig{
 			Topic:          cfg.KafkaTopic,
