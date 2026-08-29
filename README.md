@@ -1,11 +1,12 @@
 # RiskFlow
 
-RiskFlow is a real-time payment risk and ML decisioning platform. The payment core provides validated, idempotent payment creation backed by a PostgreSQL transaction and transactional outbox.
+RiskFlow is a real-time payment risk and ML decisioning platform. The payment core provides validated, idempotent payment creation backed by a PostgreSQL transaction and transactional outbox. A Python worker consumes those events, maintains online Redis features, and publishes explainable deterministic risk decisions.
 
 ## Requirements
 
 - Docker Desktop with Linux containers
 - Go 1.26 or newer for local development
+- Python 3.13 for direct risk-service development
 - PowerShell 7 for the documented Windows commands
 
 ## Local configuration
@@ -113,6 +114,37 @@ PostgreSQL row locks allow multiple publisher processes to share the backlog saf
 ```powershell
 docker compose up -d --scale outbox-publisher=2
 ```
+
+## Deterministic risk worker
+
+The Python `risk-service` validates `payments.created` envelopes before using them. It atomically records each source `event_id` and updates customer velocity, seen-device, and first-observed-country features in Redis. A replay returns the cached feature snapshot instead of incrementing velocity twice.
+
+Rules produce `ALLOW`, `REVIEW`, or `BLOCK`, a score from 0 to 100, readable reason codes, `rules-v1`, and a UTC decision timestamp. Current signals are:
+
+- high or extreme amount;
+- five-minute customer velocity;
+- a newly observed device;
+- a country different from the customer's first observed country;
+- explicitly configured merchant IDs and countries.
+
+`RISKY_MERCHANT_IDS` and `HIGH_RISK_COUNTRIES` default to empty because the project has no authoritative risk list. Failure-history rules are intentionally deferred until a trustworthy failure/decision history exists. The first observed country is an online heuristic, not verified customer residency.
+
+The decision is published to `risk.decisions` before the input Kafka offset is committed. A crash in between can publish a duplicate, so each output uses a deterministic decision `event_id` derived from the input `event_id`; downstream consumers must deduplicate it. Invalid event contracts are published to `risk.invalid-events` before their offsets are committed, preventing a poison record from blocking its partition without silently discarding it.
+
+Run Python verification directly:
+
+```powershell
+Push-Location services/risk-service
+python -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install ".[dev]"
+& .\.venv\Scripts\python.exe -m ruff format --check .
+& .\.venv\Scripts\python.exe -m ruff check .
+$env:TEST_REDIS_URL = "redis://localhost:6379/15"
+& .\.venv\Scripts\python.exe -m pytest -q
+Pop-Location
+```
+
+The XGBoost model, trained artifact, and evaluated ML thresholds are not part of this deterministic checkpoint and are not claimed here.
 
 ## Go verification
 

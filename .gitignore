@@ -12,6 +12,16 @@ coverage.out
 .audit-gocache/
 .cache/
 
+# Python environments, caches, and build artifacts
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
 # Editors and operating systems
 .idea/
 .vscode/

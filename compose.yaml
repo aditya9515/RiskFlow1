@@ -68,18 +68,12 @@ services:
     image: apache/kafka:4.3.1
     container_name: riskflow1-kafka-init
     restart: "no"
-    entrypoint: ["/opt/kafka/bin/kafka-topics.sh"]
+    entrypoint: ["/bin/sh", "-ec"]
     command:
-      - --bootstrap-server
-      - kafka:19092
-      - --create
-      - --if-not-exists
-      - --topic
-      - ${KAFKA_TOPIC:-payments.created}
-      - --partitions
-      - "3"
-      - --replication-factor
-      - "1"
+      - |
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic ${KAFKA_TOPIC:-payments.created} --partitions 3 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic ${RISK_DECISIONS_TOPIC:-risk.decisions} --partitions 3 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic ${RISK_INVALID_EVENTS_TOPIC:-risk.invalid-events} --partitions 3 --replication-factor 1
     depends_on:
       kafka:
         condition: service_healthy
@@ -145,6 +139,39 @@ services:
         condition: service_completed_successfully
       kafka-init:
         condition: service_completed_successfully
+
+  risk-service:
+    build:
+      context: .
+      dockerfile: services/risk-service/Dockerfile
+    container_name: riskflow1-risk-service
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKERS: kafka:19092
+      PAYMENTS_TOPIC: ${KAFKA_TOPIC:-payments.created}
+      RISK_DECISIONS_TOPIC: ${RISK_DECISIONS_TOPIC:-risk.decisions}
+      RISK_INVALID_EVENTS_TOPIC: ${RISK_INVALID_EVENTS_TOPIC:-risk.invalid-events}
+      RISK_CONSUMER_GROUP: ${RISK_CONSUMER_GROUP:-riskflow-deterministic-rules-v1}
+      REDIS_URL: redis://redis:6379/0
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-riskflow:risk:v1}
+      RISK_POLL_TIMEOUT: ${RISK_POLL_TIMEOUT:-1}
+      RISK_PUBLISH_TIMEOUT: ${RISK_PUBLISH_TIMEOUT:-5}
+      RISK_RETRY_BACKOFF: ${RISK_RETRY_BACKOFF:-1}
+      VELOCITY_WINDOW_SECONDS: ${VELOCITY_WINDOW_SECONDS:-300}
+      EVENT_CACHE_TTL_SECONDS: ${EVENT_CACHE_TTL_SECONDS:-2592000}
+      FEATURE_STATE_TTL_SECONDS: ${FEATURE_STATE_TTL_SECONDS:-2592000}
+      HIGH_AMOUNT_MINOR: ${HIGH_AMOUNT_MINOR:-100000}
+      EXTREME_AMOUNT_MINOR: ${EXTREME_AMOUNT_MINOR:-500000}
+      REVIEW_THRESHOLD: ${REVIEW_THRESHOLD:-40}
+      BLOCK_THRESHOLD: ${BLOCK_THRESHOLD:-70}
+      RISKY_MERCHANT_IDS: ${RISKY_MERCHANT_IDS:-}
+      HIGH_RISK_COUNTRIES: ${HIGH_RISK_COUNTRIES:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:
