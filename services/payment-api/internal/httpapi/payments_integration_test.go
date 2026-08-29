@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -194,6 +195,47 @@ func TestPostgresOutboxFailureRollsBackPayment(t *testing.T) {
 	assertRowCounts(t, pool, 0, 0)
 }
 
+func TestPostgresGetPaymentByID(t *testing.T) {
+	handler, pool := newIntegrationHandler(t)
+
+	created := performPaymentRequest(handler, "get-payment-key", validPaymentJSON)
+	if created.err != nil || created.status != http.StatusCreated {
+		t.Fatalf("create payment: status=%d err=%v body=%s", created.status, created.err, created.rawBody)
+	}
+
+	found := performGetPaymentRequest(handler, strings.ToUpper(created.payment.ID))
+	if found.err != nil {
+		t.Fatalf("get payment: %v", found.err)
+	}
+	if found.status != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body=%s", found.status, found.rawBody)
+	}
+	if found.payment.ID != created.payment.ID || found.payment.CustomerID != "customer-1" {
+		t.Fatalf("unexpected retrieved payment: %+v", found.payment)
+	}
+	if found.payment.CreatedAt.Location() != time.UTC || found.payment.UpdatedAt.Location() != time.UTC {
+		t.Fatalf("retrieved timestamps are not UTC: created=%s updated=%s", found.payment.CreatedAt, found.payment.UpdatedAt)
+	}
+
+	missing := performGetPaymentRequest(handler, "10000000-0000-4000-8000-000000000099")
+	if missing.err != nil {
+		t.Fatalf("get missing payment: %v", missing.err)
+	}
+	if missing.status != http.StatusNotFound || missing.apiError.Code != "payment_not_found" {
+		t.Fatalf("missing status/code = %d/%q, want 404/payment_not_found; body=%s", missing.status, missing.apiError.Code, missing.rawBody)
+	}
+
+	invalid := performGetPaymentRequest(handler, "not-a-uuid")
+	if invalid.err != nil {
+		t.Fatalf("get invalid payment ID: %v", invalid.err)
+	}
+	if invalid.status != http.StatusBadRequest || invalid.apiError.Code != "invalid_payment_id" {
+		t.Fatalf("invalid status/code = %d/%q, want 400/invalid_payment_id; body=%s", invalid.status, invalid.apiError.Code, invalid.rawBody)
+	}
+
+	assertRowCounts(t, pool, 1, 1)
+}
+
 func newIntegrationHandler(t *testing.T) (http.Handler, *pgxpool.Pool) {
 	t.Helper()
 
@@ -267,6 +309,26 @@ func performPaymentRequest(handler http.Handler, idempotencyKey, body string) re
 
 	result := requestResult{status: recorder.Code, rawBody: recorder.Body.String()}
 	if recorder.Code == http.StatusCreated || recorder.Code == http.StatusOK {
+		result.err = json.NewDecoder(bytes.NewReader(recorder.Body.Bytes())).Decode(&result.payment)
+		return result
+	}
+
+	var response errorResponse
+	if err := json.NewDecoder(bytes.NewReader(recorder.Body.Bytes())).Decode(&response); err != nil {
+		result.err = fmt.Errorf("decode HTTP %d error response: %w", recorder.Code, err)
+		return result
+	}
+	result.apiError = response.Error
+	return result
+}
+
+func performGetPaymentRequest(handler http.Handler, id string) requestResult {
+	request := httptest.NewRequest(http.MethodGet, "/v1/payments/"+id, nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	result := requestResult{status: recorder.Code, rawBody: recorder.Body.String()}
+	if recorder.Code == http.StatusOK {
 		result.err = json.NewDecoder(bytes.NewReader(recorder.Body.Bytes())).Decode(&result.payment)
 		return result
 	}

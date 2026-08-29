@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 )
@@ -10,12 +11,19 @@ import (
 type capturingRepository struct {
 	payment Payment
 	event   OutboxEvent
+	getID   string
+	getErr  error
 }
 
 func (r *capturingRepository) Create(_ context.Context, payment Payment, event OutboxEvent) (CreateResult, error) {
 	r.payment = payment
 	r.event = event
 	return CreateResult{Payment: payment}, nil
+}
+
+func (r *capturingRepository) GetByID(_ context.Context, id string) (Payment, error) {
+	r.getID = id
+	return r.payment, r.getErr
 }
 
 func TestServiceCreatesNormalizedPaymentAndOutboxEvent(t *testing.T) {
@@ -80,5 +88,37 @@ func TestServiceRejectsInvalidRequestBeforeRepository(t *testing.T) {
 	}
 	if repository.payment.ID != "" {
 		t.Fatal("repository was called for invalid request")
+	}
+}
+
+func TestServiceGetsPaymentUsingNormalizedID(t *testing.T) {
+	t.Parallel()
+
+	repository := &capturingRepository{payment: Payment{ID: "abcdef00-0000-4000-8000-00000000000a"}}
+	service := NewService(repository)
+
+	stored, err := service.Get(context.Background(), "ABCDEF00-0000-4000-8000-00000000000A")
+	if err != nil {
+		t.Fatalf("get payment: %v", err)
+	}
+	if repository.getID != "abcdef00-0000-4000-8000-00000000000a" {
+		t.Fatalf("repository ID = %q", repository.getID)
+	}
+	if stored.ID != repository.payment.ID {
+		t.Fatalf("payment ID = %q, want %q", stored.ID, repository.payment.ID)
+	}
+}
+
+func TestServiceRejectsInvalidPaymentIDBeforeRepository(t *testing.T) {
+	t.Parallel()
+
+	repository := &capturingRepository{}
+	service := NewService(repository)
+
+	if _, err := service.Get(context.Background(), "not-a-uuid"); !errors.Is(err, ErrPaymentIDInvalid) {
+		t.Fatalf("error = %v, want ErrPaymentIDInvalid", err)
+	}
+	if repository.getID != "" {
+		t.Fatalf("repository called with ID %q", repository.getID)
 	}
 }

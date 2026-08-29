@@ -9,6 +9,8 @@ var (
 	ErrIdempotencyKeyRequired = errors.New("idempotency key is required")
 	ErrIdempotencyKeyInvalid  = errors.New("idempotency key is invalid")
 	ErrIdempotencyConflict    = errors.New("idempotency key was already used with a different request")
+	ErrPaymentIDInvalid       = errors.New("payment ID is invalid")
+	ErrPaymentNotFound        = errors.New("payment not found")
 )
 
 // ValidationError reports domain validation failures by request field.

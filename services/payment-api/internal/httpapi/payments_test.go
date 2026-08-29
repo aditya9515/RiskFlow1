@@ -19,6 +19,19 @@ type fakePaymentCreator struct {
 	calls  int
 }
 
+type fakePaymentReader struct {
+	payment payment.Payment
+	err     error
+	id      string
+	calls   int
+}
+
+func (f *fakePaymentReader) Get(_ context.Context, id string) (payment.Payment, error) {
+	f.calls++
+	f.id = id
+	return f.payment, f.err
+}
+
 func (f *fakePaymentCreator) Create(_ context.Context, _ string, _ payment.CreateRequest) (payment.CreateResult, error) {
 	f.calls++
 	return f.result, f.err
@@ -151,6 +164,77 @@ func TestCreatePaymentMapsMissingIdempotencyKey(t *testing.T) {
 	decodeJSON(t, recorder, &response)
 	if !errors.Is(creator.err, payment.ErrIdempotencyKeyRequired) || response.Error.Code != "missing_idempotency_key" {
 		t.Fatalf("unexpected response: %+v", response)
+	}
+}
+
+func TestGetPaymentReturnsStoredPayment(t *testing.T) {
+	t.Parallel()
+
+	stored := payment.Payment{
+		ID: "10000000-0000-4000-8000-000000000001", CustomerID: "customer-1",
+		MerchantID: "merchant-1", DeviceID: "device-1", AmountMinor: 1500,
+		Currency: "USD", Country: "IN", Status: payment.StatusPendingRisk,
+		CreatedAt: time.Date(2026, time.August, 29, 10, 0, 0, 0, time.FixedZone("test", 5*60*60+30*60)),
+		UpdatedAt: time.Date(2026, time.August, 29, 10, 1, 0, 0, time.FixedZone("test", 5*60*60+30*60)),
+	}
+	reader := &fakePaymentReader{payment: stored}
+	handler := getPaymentHandler(reader, 3*time.Second, discardLogger())
+	request := httptest.NewRequest(http.MethodGet, "/v1/payments/"+stored.ID, nil)
+	request.SetPathValue("id", stored.ID)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", recorder.Code)
+	}
+	if reader.id != stored.ID || reader.calls != 1 {
+		t.Fatalf("reader ID/calls = %q/%d", reader.id, reader.calls)
+	}
+	var response paymentResponse
+	decodeJSON(t, recorder, &response)
+	if response.ID != stored.ID || response.AmountMinor != stored.AmountMinor {
+		t.Fatalf("unexpected payment response: %+v", response)
+	}
+	if response.CreatedAt.Location() != time.UTC || response.UpdatedAt.Location() != time.UTC {
+		t.Fatalf("response timestamps are not UTC: created=%s updated=%s", response.CreatedAt, response.UpdatedAt)
+	}
+}
+
+func TestGetPaymentReturnsTypedErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "invalid ID", err: payment.ErrPaymentIDInvalid, wantStatus: http.StatusBadRequest, wantCode: "invalid_payment_id"},
+		{name: "not found", err: payment.ErrPaymentNotFound, wantStatus: http.StatusNotFound, wantCode: "payment_not_found"},
+		{name: "timeout", err: context.DeadlineExceeded, wantStatus: http.StatusGatewayTimeout, wantCode: "request_timeout"},
+		{name: "database failure", err: errors.New("database offline"), wantStatus: http.StatusInternalServerError, wantCode: "internal_error"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			reader := &fakePaymentReader{err: tt.err}
+			handler := getPaymentHandler(reader, 3*time.Second, discardLogger())
+			request := httptest.NewRequest(http.MethodGet, "/v1/payments/10000000-0000-4000-8000-000000000001", nil)
+			request.SetPathValue("id", "10000000-0000-4000-8000-000000000001")
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+
+			if recorder.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
+			}
+			var response errorResponse
+			decodeJSON(t, recorder, &response)
+			if response.Error.Code != tt.wantCode {
+				t.Fatalf("error code = %q, want %q", response.Error.Code, tt.wantCode)
+			}
+		})
 	}
 }
 

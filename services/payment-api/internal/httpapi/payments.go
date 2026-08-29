@@ -20,6 +20,17 @@ type PaymentCreator interface {
 	Create(context.Context, string, payment.CreateRequest) (payment.CreateResult, error)
 }
 
+// PaymentReader is the payment lookup behavior required by HTTP.
+type PaymentReader interface {
+	Get(context.Context, string) (payment.Payment, error)
+}
+
+// PaymentService contains the payment use cases exposed by the API.
+type PaymentService interface {
+	PaymentCreator
+	PaymentReader
+}
+
 type paymentResponse struct {
 	ID          string    `json:"id"`
 	CustomerID  string    `json:"customer_id"`
@@ -30,6 +41,7 @@ type paymentResponse struct {
 	Country     string    `json:"country"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func createPaymentHandler(creator PaymentCreator, timeout time.Duration, logger *slog.Logger) http.Handler {
@@ -57,6 +69,21 @@ func createPaymentHandler(creator PaymentCreator, timeout time.Duration, logger 
 			status = http.StatusOK
 		}
 		writeJSON(w, status, newPaymentResponse(result.Payment))
+	})
+}
+
+func getPaymentHandler(reader PaymentReader, timeout time.Duration, logger *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+
+		stored, err := reader.Get(ctx, r.PathValue("id"))
+		if err != nil {
+			writeGetPaymentError(w, r, err, logger)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, newPaymentResponse(stored))
 	})
 }
 
@@ -113,6 +140,32 @@ func writeCreatePaymentError(w http.ResponseWriter, r *http.Request, err error, 
 	}
 }
 
+func writeGetPaymentError(w http.ResponseWriter, r *http.Request, err error, logger *slog.Logger) {
+	switch {
+	case errors.Is(err, payment.ErrPaymentIDInvalid):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: APIError{
+			Code:    "invalid_payment_id",
+			Message: "payment ID must be a valid UUID",
+		}})
+	case errors.Is(err, payment.ErrPaymentNotFound):
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: APIError{
+			Code:    "payment_not_found",
+			Message: "payment not found",
+		}})
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: APIError{
+			Code:    "request_timeout",
+			Message: "payment lookup timed out",
+		}})
+	default:
+		logger.ErrorContext(r.Context(), "get payment failed", slog.String("error", err.Error()))
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: APIError{
+			Code:    "internal_error",
+			Message: "payment could not be retrieved",
+		}})
+	}
+}
+
 func newPaymentResponse(stored payment.Payment) paymentResponse {
 	return paymentResponse{
 		ID:          stored.ID,
@@ -124,5 +177,6 @@ func newPaymentResponse(stored payment.Payment) paymentResponse {
 		Country:     stored.Country,
 		Status:      stored.Status,
 		CreatedAt:   stored.CreatedAt.UTC(),
+		UpdatedAt:   stored.UpdatedAt.UTC(),
 	}
 }

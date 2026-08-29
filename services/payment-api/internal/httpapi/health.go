@@ -31,7 +31,7 @@ type APIError struct {
 // NewHandler builds the API routes with their required dependencies.
 func NewHandler(
 	pinger Pinger,
-	paymentCreator PaymentCreator,
+	payments PaymentService,
 	readinessTimeout time.Duration,
 	paymentTimeout time.Duration,
 	logger *slog.Logger,
@@ -61,7 +61,8 @@ func NewHandler(
 
 		writeJSON(w, http.StatusOK, statusResponse{Status: "ready"})
 	})
-	mux.Handle("POST /v1/payments", createPaymentHandler(paymentCreator, paymentTimeout, logger))
+	mux.Handle("POST /v1/payments", createPaymentHandler(payments, paymentTimeout, logger))
+	mux.Handle("GET /v1/payments/{id}", getPaymentHandler(payments, paymentTimeout, logger))
 
 	return mux
 }

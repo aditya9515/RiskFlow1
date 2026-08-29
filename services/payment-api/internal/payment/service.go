@@ -8,9 +8,10 @@ import (
 	"time"
 )
 
-// Repository persists a payment and its outbox event as one atomic operation.
+// Repository persists and retrieves payments.
 type Repository interface {
 	Create(context.Context, Payment, OutboxEvent) (CreateResult, error)
+	GetByID(context.Context, string) (Payment, error)
 }
 
 // Service implements payment validation, fingerprinting, and event creation.
@@ -97,6 +98,16 @@ func (s *Service) Create(ctx context.Context, idempotencyKey string, request Cre
 	}
 
 	return s.repository.Create(ctx, payment, event)
+}
+
+// Get validates and normalizes a payment ID before loading it.
+func (s *Service) Get(ctx context.Context, id string) (Payment, error) {
+	normalizedID, err := NormalizeID(id)
+	if err != nil {
+		return Payment{}, err
+	}
+
+	return s.repository.GetByID(ctx, normalizedID)
 }
 
 type paymentCreatedPayload struct {

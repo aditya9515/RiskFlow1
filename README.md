@@ -74,6 +74,17 @@ The first request returns `201 Created`. Repeating the normalized payment with t
 
 The request fingerprint is SHA-256 over validated, normalized fields in a fixed order; insignificant JSON whitespace, object-key order, and lowercase currency/country codes do not change it.
 
+## Retrieve a payment
+
+Use the UUID returned by the create endpoint:
+
+```powershell
+$paymentID = "10000000-0000-4000-8000-000000000001"
+Invoke-RestMethod -Method Get -Uri "http://localhost:8080/v1/payments/$paymentID"
+```
+
+A stored payment returns `200 OK`. A valid UUID with no corresponding payment returns the typed error `payment_not_found` with `404 Not Found`. A malformed UUID returns `invalid_payment_id` with `400 Bad Request` without querying PostgreSQL.
+
 ## Go verification
 
 ```powershell

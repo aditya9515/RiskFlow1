@@ -79,6 +79,19 @@ func (r *PostgresRepository) Create(ctx context.Context, candidate Payment, even
 	return CreateResult{Payment: stored, Replayed: false}, nil
 }
 
+// GetByID loads a payment without changing it or its outbox event.
+func (r *PostgresRepository) GetByID(ctx context.Context, id string) (Payment, error) {
+	stored, err := scanPayment(r.pool.QueryRow(ctx, selectPaymentByIDSQL, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Payment{}, ErrPaymentNotFound
+	}
+	if err != nil {
+		return Payment{}, fmt.Errorf("load payment by ID: %w", err)
+	}
+
+	return stored, nil
+}
+
 type rowScanner interface {
 	Scan(...any) error
 }
@@ -124,6 +137,13 @@ SELECT
     device_id, amount_minor, currency::text, country::text, status, created_at, updated_at
 FROM payments
 WHERE idempotency_key = $1`
+
+const selectPaymentByIDSQL = `
+SELECT
+    id::text, idempotency_key, request_fingerprint, customer_id, merchant_id,
+    device_id, amount_minor, currency::text, country::text, status, created_at, updated_at
+FROM payments
+WHERE id = $1`
 
 const insertOutboxEventSQL = `
 INSERT INTO outbox_events (
