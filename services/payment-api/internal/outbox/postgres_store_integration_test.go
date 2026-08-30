@@ -260,7 +260,9 @@ func truncateOutboxTables(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := pool.Exec(ctx, `TRUNCATE TABLE outbox_events, payments`); err != nil {
+	if _, err := pool.Exec(ctx, `
+		TRUNCATE TABLE manual_review_queue, audit_events, decision_ingestion_records,
+			payment_decisions, outbox_events, payments`); err != nil {
 		t.Fatalf("truncate outbox integration tables: %v", err)
 	}
 }

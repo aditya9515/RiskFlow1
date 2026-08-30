@@ -135,6 +135,20 @@ The model was trained on 50,000 reproducible fictional payments with a 60/20/20 
 
 The decision is published to `risk.decisions` before the input Kafka offset is committed. A crash in between can publish a duplicate, so each output uses a deterministic decision `event_id` derived from the input `event_id`; downstream consumers must deduplicate it. Invalid event contracts are published to `risk.invalid-events` before their offsets are committed, preventing a poison record from blocking its partition without silently discarding it.
 
+## Decision persistence and controls
+
+The Go `risk-decision-consumer` validates schema-v2 `risk.decisions` records and persists each decision, payment status change, system audit event, manual-review entry, and Kafka ingestion receipt in one PostgreSQL transaction. It commits the Kafka offset only after PostgreSQL commits. A replay creates another ingestion receipt but not another decision, audit event, or review item.
+
+Malformed records and permanent state conflicts are stored as rejected ingestion records with their original bytes and error evidence before their offsets advance. Decision history, ingestion receipts, and audit events are protected from update and deletion by PostgreSQL triggers.
+
+Run the read-only JSON exception report:
+
+```powershell
+docker compose run --rm decision-reconciler
+```
+
+See [risk decision persistence and reconciliation](docs/decision-persistence.md) for the transaction boundary, table responsibilities, exception types, and inspection queries.
+
 Run Python verification directly:
 
 ```powershell

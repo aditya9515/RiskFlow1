@@ -175,6 +175,44 @@ services:
       redis:
         condition: service_healthy
 
+  risk-decision-consumer:
+    build:
+      context: .
+      dockerfile: services/payment-api/Dockerfile
+      target: risk-decision-consumer
+    container_name: riskflow1-risk-decision-consumer
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      KAFKA_BROKERS: kafka:19092
+      RISK_DECISIONS_TOPIC: ${RISK_DECISIONS_TOPIC:-risk.decisions}
+      DECISION_CONSUMER_GROUP: ${DECISION_CONSUMER_GROUP:-riskflow-decision-persistence-v1}
+      DECISION_AUTO_OFFSET_RESET: ${DECISION_AUTO_OFFSET_RESET:-earliest}
+      DECISION_PROCESS_TIMEOUT: ${DECISION_PROCESS_TIMEOUT:-5s}
+      DECISION_RETRY_BACKOFF: ${DECISION_RETRY_BACKOFF:-1s}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+
+  decision-reconciler:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: services/payment-api/Dockerfile
+      target: decision-reconciler
+    restart: "no"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      RECONCILIATION_GRACE_PERIOD: ${RECONCILIATION_GRACE_PERIOD:-30s}
+      RECONCILIATION_TIMEOUT: ${RECONCILIATION_TIMEOUT:-10s}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   postgres_data:
   redis_data:

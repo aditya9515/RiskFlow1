@@ -7,7 +7,9 @@ RUN go mod download
 
 COPY services/payment-api/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/payment-api ./cmd/api && \
-    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/outbox-publisher ./cmd/outbox-publisher
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/outbox-publisher ./cmd/outbox-publisher && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/risk-decision-consumer ./cmd/risk-decision-consumer && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/decision-reconciler ./cmd/decision-reconciler
 
 FROM alpine:3.22 AS runtime
 
@@ -21,6 +23,18 @@ FROM runtime AS outbox-publisher
 COPY --from=build /out/outbox-publisher /usr/local/bin/outbox-publisher
 
 ENTRYPOINT ["/usr/local/bin/outbox-publisher"]
+
+FROM runtime AS risk-decision-consumer
+
+COPY --from=build /out/risk-decision-consumer /usr/local/bin/risk-decision-consumer
+
+ENTRYPOINT ["/usr/local/bin/risk-decision-consumer"]
+
+FROM runtime AS decision-reconciler
+
+COPY --from=build /out/decision-reconciler /usr/local/bin/decision-reconciler
+
+ENTRYPOINT ["/usr/local/bin/decision-reconciler"]
 
 FROM runtime AS payment-api
 
