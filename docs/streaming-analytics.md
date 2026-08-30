@@ -1,6 +1,6 @@
 # Streaming analytics
 
-Checkpoint 5A adds a deliberately small lake-ingestion boundary. Spark Structured Streaming reads the existing payment and risk-decision contracts, validates them, and stores append-only Parquet data for later operational aggregates. This checkpoint does not calculate dashboards or business aggregates yet.
+Checkpoint 5A established the lake-ingestion boundary. Checkpoint 5B adds restart-safe, mergeable operational aggregates over the same validated streams. Spark Structured Streaming reads the existing payment and risk-decision contracts, validates them, stores append-only curated Parquet data, quarantines invalid records, and writes daily aggregate deltas for operational reporting.
 
 ## Runtime
 
@@ -30,19 +30,36 @@ data/
   payments/event_date=YYYY-MM-DD/*.parquet
   risk_decisions/event_date=YYYY-MM-DD/decision=ALLOW|REVIEW|BLOCK/*.parquet
   quarantine/event_date=YYYY-MM-DD/source_topic=<topic>/*.parquet
+  operational_metrics/
+    batch_id=<20-digit-id>/event_date=YYYY-MM-DD/metric_family=<family>/*.parquet
 ```
 
 Curated rows include source Kafka coordinates and `ingested_at`. Quarantine rows retain the raw value, source coordinates, quarantine time, and all applicable typed error codes. Keeping malformed records separate prevents one bad event from blocking useful analytics while preserving evidence for diagnosis.
 
+The operational dataset contains these metric families:
+
+| Family | Dimensions | Stored values |
+| --- | --- | --- |
+| `payment_volume` | overall, merchant, country | payment count and integer minor-unit amount sum |
+| `decision_rate` | decision outcome | outcome count and batch denominator/rate |
+| `risk_score_distribution` | overall and decision outcome | ten-point score bucket plus score count/sum/min/max/average |
+| `ingestion_latency` | source Kafka topic | latency count/sum/min/max/average in milliseconds |
+| `quarantine_error` | source topic and error code | invalid-record error count |
+
+Each row is a daily delta from one Spark micro-batch. Counts, amount sums, score sums/counts, and latency sums/counts can be added across batches. Global rates and averages must be recomputed from their combined numerators and denominators; averaging per-batch rates or averages would be mathematically wrong. The inspection script follows this rule.
+
+Ingestion latency is measured from the Kafka record timestamp to the moment the curated record entered this Spark job. Replaying historical topic data therefore produces intentionally large latency values. Use this metric operationally only after the job has caught up; it is not end-to-end payment-decision latency.
+
 ## Checkpoints and recovery
 
-The three sinks have independent checkpoint directories:
+The four sinks have independent checkpoint directories:
 
 ```text
 checkpoints/
   payments/
   risk_decisions/
   quarantine/
+  operational_metrics/
 ```
 
 Spark commits input offsets and file-sink metadata in these directories. `SPARK_STARTING_OFFSETS` only controls a query with no checkpoint; after that, the checkpoint is authoritative. Restarting the same job with the same output and checkpoint roots resumes after its committed offsets.
@@ -51,7 +68,11 @@ Do not reuse one checkpoint with a different query or output path, and do not de
 
 Curated streams apply a seven-day event-time watermark and deduplicate `event_id` within that state window. This protects normal retry/replay traffic without retaining unbounded state. A duplicate older than the watermark can be written again, so long-term consumers should still treat `event_id` as the durable identity.
 
-Kafka delivery and the file sink should be understood as recoverable, checkpoint-driven processing—not a blanket exactly-once claim across every external system. The included restart test starts a file stream three times against one checkpoint, adds input between starts, and proves the third start does not duplicate already committed rows.
+Kafka delivery and the file sink should be understood as recoverable, checkpoint-driven processing—not a blanket exactly-once claim across every external system. The curated restart test starts a file stream three times against one checkpoint, adds input between starts, and proves the third start does not duplicate already committed rows.
+
+Operational metrics use `foreachBatch`. Every batch writes to a deterministic `batch_id` directory with overwrite mode, so retrying the same batch ID replaces its prior result instead of adding another copy. The dedicated checkpoint prevents committed Kafka offsets from being processed again after a normal restart. An empty micro-batch may leave an empty batch directory; readers count only rows with a `batch_id` value.
+
+Plain Parquet does not provide a multi-file transaction. A host or storage failure during overwrite can still leave a partial batch. Production object storage should use an atomic table format such as Delta Lake or Iceberg, or publish a completion manifest after verification. This local checkpoint keeps the implementation reliable enough for the current Compose deployment without making a stronger guarantee than the storage layer provides.
 
 ## Configuration
 
@@ -92,4 +113,4 @@ docker compose run --rm --no-deps `
     /var/lib/riskflow/streaming/data
 ```
 
-The inspection result reports row and distinct `event_id` counts for curated datasets plus quarantine row/error counts. Equal row and distinct-ID counts are the expected result for curated data within the configured deduplication window.
+The inspection result reports row and distinct `event_id` counts for curated datasets; quarantine row/error counts; overall, merchant, and country payment totals; decision counts/rates; score buckets; per-topic ingestion latency; and aggregated quarantine error counts. Equal row and distinct-ID counts are the expected result for curated data within the configured deduplication window.

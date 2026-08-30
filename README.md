@@ -184,7 +184,9 @@ The `streaming-analytics` service uses Spark Structured Streaming to consume `pa
 
 Each output has its own durable checkpoint under the `streaming_data` Docker volume. After a restart, Spark resumes from the committed Kafka offsets rather than replaying the topic from the configured initial position. Curated events are also deduplicated by `event_id` inside a seven-day event-time watermark.
 
-Inspect current row and distinct-event counts without changing the stream:
+A fourth checkpointed query writes mergeable daily operational deltas for payment count and minor-unit amount by merchant/country, allow/review/block rates, score buckets, Kafka-to-lake ingestion latency, and quarantine error counts. A deterministic directory per Spark batch makes retrying that batch overwrite its earlier result. Cross-batch rates and averages are recomputed from stored sums and counts, not averaged from per-batch values.
+
+Inspect current curated counts and operational aggregates without changing the stream:
 
 ```powershell
 docker compose run --rm --no-deps `

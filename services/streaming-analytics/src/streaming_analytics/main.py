@@ -9,6 +9,7 @@ from threading import Event
 from pyspark.sql import SparkSession
 
 from streaming_analytics.config import Settings
+from streaming_analytics.metrics import build_operational_observations, start_operational_query
 from streaming_analytics.sink import start_parquet_query
 from streaming_analytics.transforms import build_streams, normalize_kafka_source
 
@@ -50,6 +51,9 @@ def main() -> int:
         decisions = streams.decisions.withWatermark(
             "occurred_at", "7 days"
         ).dropDuplicatesWithinWatermark(["event_id"])
+        operational_observations = build_operational_observations(
+            payments, decisions, streams.quarantine
+        )
 
         queries.extend(
             [
@@ -75,6 +79,12 @@ def main() -> int:
                     checkpoint_path=_path(settings.checkpoint_root, "quarantine"),
                     query_name="riskflow_events_quarantine",
                     partition_columns=["event_date", "source_topic"],
+                    trigger_interval=settings.trigger_interval,
+                ),
+                start_operational_query(
+                    operational_observations,
+                    output_path=_path(settings.output_root, "operational_metrics"),
+                    checkpoint_path=_path(settings.checkpoint_root, "operational_metrics"),
                     trigger_interval=settings.trigger_interval,
                 ),
             ]
