@@ -178,6 +178,26 @@ Approval maps the payment from `REVIEW` to `ALLOWED`; rejection maps it to `BLOC
 
 See [manual-review controls](docs/manual-review-controls.md) for roles, endpoint contracts, reason-code rules, optimistic locking, and operational queries.
 
+## Streaming lake ingestion
+
+The `streaming-analytics` service uses Spark Structured Streaming to consume `payments.created` and `risk.decisions` through one Kafka source. It applies explicit schema and field validation before writing curated Parquet datasets. Invalid JSON, unsupported schema versions, missing fields, inconsistent IDs, and invalid scores are written to a separate quarantine dataset with the original Kafka topic, partition, offset, record bytes, and readable error codes.
+
+Each output has its own durable checkpoint under the `streaming_data` Docker volume. After a restart, Spark resumes from the committed Kafka offsets rather than replaying the topic from the configured initial position. Curated events are also deduplicated by `event_id` inside a seven-day event-time watermark.
+
+Inspect current row and distinct-event counts without changing the stream:
+
+```powershell
+docker compose run --rm --no-deps `
+    --entrypoint /opt/spark/bin/spark-submit `
+    streaming-analytics `
+    --master 'local[1]' `
+    --conf spark.ui.enabled=false `
+    /opt/riskflow/scripts/inspect_output.py `
+    /var/lib/riskflow/streaming/data
+```
+
+See [streaming analytics](docs/streaming-analytics.md) for schemas, partitions, checkpoint semantics, recovery limits, and verification commands.
+
 Run Python verification directly:
 
 ```powershell

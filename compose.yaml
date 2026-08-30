@@ -215,6 +215,30 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  streaming-analytics:
+    build:
+      context: .
+      dockerfile: services/streaming-analytics/Dockerfile
+      target: runtime
+    container_name: riskflow1-streaming-analytics
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKERS: kafka:19092
+      PAYMENTS_TOPIC: ${KAFKA_TOPIC:-payments.created}
+      RISK_DECISIONS_TOPIC: ${RISK_DECISIONS_TOPIC:-risk.decisions}
+      SPARK_MASTER: ${SPARK_MASTER:-local[2]}
+      SPARK_OUTPUT_ROOT: ${SPARK_OUTPUT_ROOT:-/var/lib/riskflow/streaming/data}
+      SPARK_CHECKPOINT_ROOT: ${SPARK_CHECKPOINT_ROOT:-/var/lib/riskflow/streaming/checkpoints}
+      SPARK_STARTING_OFFSETS: ${SPARK_STARTING_OFFSETS:-earliest}
+      SPARK_TRIGGER_INTERVAL: ${SPARK_TRIGGER_INTERVAL:-5 seconds}
+      SPARK_MAX_OFFSETS_PER_TRIGGER: ${SPARK_MAX_OFFSETS_PER_TRIGGER:-10000}
+    volumes:
+      - streaming_data:/var/lib/riskflow/streaming
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
 volumes:
   postgres_data:
   redis_data:
+  streaming_data:
