@@ -26,14 +26,18 @@ type APIError struct {
 	Code    string            `json:"code"`
 	Message string            `json:"message"`
 	Fields  map[string]string `json:"fields,omitempty"`
+	Details map[string]any    `json:"details,omitempty"`
 }
 
 // NewHandler builds the API routes with their required dependencies.
 func NewHandler(
 	pinger Pinger,
 	payments PaymentService,
+	reviews ReviewService,
+	reviewAuth ReviewAuthenticator,
 	readinessTimeout time.Duration,
 	paymentTimeout time.Duration,
+	reviewTimeout time.Duration,
 	logger *slog.Logger,
 ) http.Handler {
 	if logger == nil {
@@ -63,6 +67,11 @@ func NewHandler(
 	})
 	mux.Handle("POST /v1/payments", createPaymentHandler(payments, paymentTimeout, logger))
 	mux.Handle("GET /v1/payments/{id}", getPaymentHandler(payments, paymentTimeout, logger))
+	if reviews != nil && reviewAuth != nil {
+		mux.Handle("GET /v1/reviews", listReviewsHandler(reviews, reviewAuth, reviewTimeout, logger))
+		mux.Handle("POST /v1/reviews/{id}/approve", resolveReviewHandler(reviews, reviewAuth, reviewTimeout, "APPROVE", logger))
+		mux.Handle("POST /v1/reviews/{id}/reject", resolveReviewHandler(reviews, reviewAuth, reviewTimeout, "REJECT", logger))
+	}
 
 	return mux
 }

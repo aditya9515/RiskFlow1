@@ -22,7 +22,7 @@ New consumer groups default to `DECISION_AUTO_OFFSET_RESET=earliest` so retained
 
 - `payment_decisions` is immutable automated decision history with scores, reasons, versions, timestamps, and the exact feature snapshot.
 - `audit_events` is an immutable record of who or what changed payment state and why.
-- `manual_review_queue` contains review work. Its version and resolution fields are reserved for the role-controlled actions in Checkpoint 4B.
+- `manual_review_queue` contains review work and its optimistic version. Role-controlled approval or rejection records the reviewer, reason, timestamp, terminal queue status, and matching payment state atomically.
 - `decision_ingestion_records` records every accepted, replayed, or rejected Kafka coordinate. Rejected values are retained for investigation instead of being silently discarded.
 
 Reusing a decision ID with different normalized content, reusing one source event for another decision, or applying an automated decision to a payment that is no longer pending is quarantined and reported.

@@ -1,30 +1,38 @@
 package config
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/review"
 )
 
 const (
 	defaultHTTPAddr         = ":8080"
 	defaultReadinessTimeout = time.Second
 	defaultPaymentTimeout   = 3 * time.Second
+	defaultReviewTimeout    = 3 * time.Second
 	defaultShutdownTimeout  = 10 * time.Second
 )
 
 // Config contains the process configuration loaded from environment variables.
 type Config struct {
-	DatabaseURL      string
-	HTTPAddr         string
-	ReadinessTimeout time.Duration
-	PaymentTimeout   time.Duration
-	ShutdownTimeout  time.Duration
-	LogLevel         slog.Level
+	DatabaseURL       string
+	HTTPAddr          string
+	ReadinessTimeout  time.Duration
+	PaymentTimeout    time.Duration
+	ReviewTimeout     time.Duration
+	ShutdownTimeout   time.Duration
+	LogLevel          slog.Level
+	ReviewCredentials []review.Credential
 }
 
 // Load reads and validates configuration from the process environment.
@@ -54,8 +62,17 @@ func load(lookup lookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	reviewTimeout, err := duration(lookup, "REVIEW_REQUEST_TIMEOUT", defaultReviewTimeout)
+	if err != nil {
+		return Config{}, err
+	}
 
 	shutdownTimeout, err := duration(lookup, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout)
+	if err != nil {
+		return Config{}, err
+	}
+
+	reviewCredentials, err := parseReviewCredentials(value(lookup, "REVIEW_AUTH_CREDENTIALS_JSON", ""))
 	if err != nil {
 		return Config{}, err
 	}
@@ -66,13 +83,45 @@ func load(lookup lookupEnv) (Config, error) {
 	}
 
 	return Config{
-		DatabaseURL:      databaseURL,
-		HTTPAddr:         httpAddr,
-		ReadinessTimeout: readinessTimeout,
-		PaymentTimeout:   paymentTimeout,
-		ShutdownTimeout:  shutdownTimeout,
-		LogLevel:         logLevel,
+		DatabaseURL:       databaseURL,
+		HTTPAddr:          httpAddr,
+		ReadinessTimeout:  readinessTimeout,
+		PaymentTimeout:    paymentTimeout,
+		ReviewTimeout:     reviewTimeout,
+		ShutdownTimeout:   shutdownTimeout,
+		LogLevel:          logLevel,
+		ReviewCredentials: reviewCredentials,
 	}, nil
+}
+
+func parseReviewCredentials(raw string) ([]review.Credential, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("REVIEW_AUTH_CREDENTIALS_JSON is required")
+	}
+	var encoded []struct {
+		ReviewerID string `json:"reviewer_id"`
+		Role       string `json:"role"`
+		Token      string `json:"token"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&encoded); err != nil {
+		return nil, fmt.Errorf("REVIEW_AUTH_CREDENTIALS_JSON must be a valid credential array: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("REVIEW_AUTH_CREDENTIALS_JSON must contain exactly one JSON array")
+	}
+	credentials := make([]review.Credential, 0, len(encoded))
+	for _, item := range encoded {
+		credentials = append(credentials, review.Credential{ReviewerID: item.ReviewerID, Role: item.Role, Token: item.Token})
+	}
+	if len(credentials) > 100 {
+		return nil, fmt.Errorf("REVIEW_AUTH_CREDENTIALS_JSON supports at most 100 credentials")
+	}
+	if _, err := review.NewTokenAuthenticator(credentials); err != nil {
+		return nil, fmt.Errorf("REVIEW_AUTH_CREDENTIALS_JSON: %w", err)
+	}
+	return credentials, nil
 }
 
 func value(lookup lookupEnv, key, fallback string) string {

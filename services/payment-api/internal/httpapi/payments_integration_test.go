@@ -261,7 +261,7 @@ func newIntegrationHandler(t *testing.T) (http.Handler, *pgxpool.Pool) {
 
 	repository := payment.NewPostgresRepository(pool)
 	service := payment.NewService(repository)
-	handler := NewHandler(pool, service, time.Second, 3*time.Second, discardLogger())
+	handler := NewHandler(pool, service, nil, nil, time.Second, 3*time.Second, 3*time.Second, discardLogger())
 	return handler, pool
 }
 

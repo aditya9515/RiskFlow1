@@ -24,6 +24,7 @@ For a direct local Go run, set the database URL explicitly:
 ```powershell
 $env:DATABASE_URL = "postgres://riskflow:your_local_password@localhost:5432/riskflow?sslmode=disable"
 $env:HTTP_ADDR = ":8080"
+$env:REVIEW_AUTH_CREDENTIALS_JSON = '[{"reviewer_id":"local-reviewer","role":"risk_reviewer","token":"replace_with_reviewer_token_32_chars"}]'
 Push-Location services/payment-api
 go run ./cmd/api
 Pop-Location
@@ -148,6 +149,34 @@ docker compose run --rm decision-reconciler
 ```
 
 See [risk decision persistence and reconciliation](docs/decision-persistence.md) for the transaction boundary, table responsibilities, exception types, and inspection queries.
+
+## Manual review controls
+
+The API exposes pending-review work only to bearer credentials configured in `REVIEW_AUTH_CREDENTIALS_JSON`. A `risk_auditor` can list pending work; a `risk_reviewer` can also approve or reject it. Reviewer identity comes from the token mapping, never from a caller-supplied identity header.
+
+```powershell
+$reviewToken = "your_local_reviewer_token"
+$authHeaders = @{ Authorization = "Bearer $reviewToken" }
+
+Invoke-RestMethod -Method Get `
+    -Uri "http://localhost:8080/v1/reviews?limit=50" `
+    -Headers $authHeaders
+
+$action = @{
+    expected_version = 1
+    reason_code = "CUSTOMER_VERIFIED"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+    -Uri "http://localhost:8080/v1/reviews/$paymentID/approve" `
+    -Headers $authHeaders `
+    -ContentType "application/json" `
+    -Body $action
+```
+
+Approval maps the payment from `REVIEW` to `ALLOWED`; rejection maps it to `BLOCKED`. Each request supplies the queue version it observed. If another reviewer wins first, the stale caller receives a typed `409 Conflict` instead of overwriting the first action. The queue update, payment state change, and immutable user audit event share one PostgreSQL transaction.
+
+See [manual-review controls](docs/manual-review-controls.md) for roles, endpoint contracts, reason-code rules, optimistic locking, and operational queries.
 
 Run Python verification directly:
 

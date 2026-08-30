@@ -11,6 +11,7 @@ import (
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/database"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/httpapi"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/payment"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/review"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/server"
 )
 
@@ -42,7 +43,24 @@ func run() int {
 
 	paymentRepository := payment.NewPostgresRepository(pool)
 	paymentService := payment.NewService(paymentRepository)
-	handler := httpapi.NewHandler(pool, paymentService, cfg.ReadinessTimeout, cfg.PaymentTimeout, logger)
+	reviewRepository := review.NewPostgresRepository(pool)
+	reviewService := review.NewService(reviewRepository)
+	reviewAuthenticator, err := review.NewTokenAuthenticator(cfg.ReviewCredentials)
+	if err != nil {
+		logger.Error("create review authenticator", slog.String("error", err.Error()))
+		return 1
+	}
+	cfg.ReviewCredentials = nil
+	handler := httpapi.NewHandler(
+		pool,
+		paymentService,
+		reviewService,
+		reviewAuthenticator,
+		cfg.ReadinessTimeout,
+		cfg.PaymentTimeout,
+		cfg.ReviewTimeout,
+		logger,
+	)
 	httpServer := server.New(cfg.HTTPAddr, handler, cfg.ShutdownTimeout, logger)
 
 	logger.Info("starting payment API", slog.String("address", cfg.HTTPAddr))
