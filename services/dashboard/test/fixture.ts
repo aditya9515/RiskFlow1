@@ -1,0 +1,76 @@
+import type { DashboardSnapshot } from "@/lib/dashboard";
+
+export const dashboardFixture: DashboardSnapshot = {
+  generated_at: "2026-08-31T09:30:00Z",
+  payments: {
+    total: 3,
+    amount_minor_total: 730000,
+    by_status: {
+      pending_risk: 0,
+      allowed: 1,
+      review: 1,
+      blocked: 1,
+      failed: 0,
+    },
+  },
+  decisions: {
+    total: 3,
+    by_outcome: {
+      allow: 1,
+      review: 1,
+      block: 1,
+    },
+    average_risk_score: 51.333333,
+    latest_rule_version: "rules-v1",
+    latest_model_version: "xgb-synthetic-v1",
+    latest_decision_at: "2026-08-31T09:29:00Z",
+  },
+  manual_review: {
+    pending: 1,
+  },
+  processing: {
+    outbox_pending: 0,
+    outbox_retrying: 0,
+    outbox_dead_lettered: 0,
+    decision_events_rejected: 0,
+  },
+  reconciliation: {
+    grace_period: "30s",
+    exception_count: 0,
+    by_code: {},
+  },
+  recent_decisions: [
+    {
+      decision_id: "20000000-0000-4000-8000-000000000001",
+      payment_id: "10000000-0000-4000-8000-000000000001",
+      customer_id: "customer-gold",
+      merchant_id: "merchant-alpha",
+      amount_minor: 620000,
+      currency: "USD",
+      country: "US",
+      payment_status: "BLOCKED",
+      decision: "BLOCK",
+      risk_score: 86,
+      reason_codes: ["EXTREME_AMOUNT", "ML_HIGH_RISK"],
+      rule_version: "rules-v1",
+      model_version: "xgb-synthetic-v1",
+      decision_at: "2026-08-31T09:29:00Z",
+    },
+    {
+      decision_id: "20000000-0000-4000-8000-000000000002",
+      payment_id: "10000000-0000-4000-8000-000000000002",
+      customer_id: "customer-silver",
+      merchant_id: "merchant-beta",
+      amount_minor: 100000,
+      currency: "EUR",
+      country: "DE",
+      payment_status: "REVIEW",
+      decision: "REVIEW",
+      risk_score: 52,
+      reason_codes: ["NEW_DEVICE"],
+      rule_version: "rules-v1",
+      model_version: "xgb-synthetic-v1",
+      decision_at: "2026-08-31T09:20:00Z",
+    },
+  ],
+};

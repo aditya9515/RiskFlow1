@@ -7,6 +7,7 @@ RiskFlow is a real-time payment risk and ML decisioning platform. The payment co
 - Docker Desktop with Linux containers
 - Go 1.26 or newer for local development
 - Python 3.13 for direct risk-service development
+- Node.js 24 for direct dashboard development
 - PowerShell 7 for the documented Windows commands
 
 ## Local configuration
@@ -38,6 +39,8 @@ From the repository root:
 docker compose up -d --build
 docker compose ps
 ```
+
+Open the operational dashboard at `http://localhost:3000`. Its server-side `DASHBOARD_API_TOKEN` must match one configured read-only reviewer/auditor credential; the token is never sent to browser JavaScript.
 
 The one-shot `migrate` container runs all pending migrations before the payment API starts. The API never applies migrations itself.
 
@@ -190,6 +193,14 @@ Invoke-RestMethod -Method Get `
 ```
 
 Core totals are read in one PostgreSQL `REPEATABLE READ`, read-only transaction. Reconciliation uses a separate count-only execution of the existing control rules. See [the operational dashboard API](docs/operational-dashboard-api.md) for field semantics, access control, consistency boundaries, and verification queries.
+
+## Operational dashboard UI
+
+The Next.js control room renders payment volume, decision distribution, pending reviews, processing failures, reconciliation breaks, model/rule versions, and recent explainable decisions from the protected dashboard API. The API token exists only in the Next.js server environment; it is not exposed through a `NEXT_PUBLIC_` variable or client-side fetch.
+
+The local page is an operator demo, not a complete public authentication boundary. Put it behind identity-aware access control before any real deployment. See [the operational dashboard guide](docs/operational-dashboard.md) for configuration, security boundaries, failure behavior, and verification commands.
+
+![RiskFlow operational dashboard](docs/screenshots/operational-dashboard.png)
 
 ## Streaming lake ingestion
 

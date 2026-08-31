@@ -123,6 +123,29 @@ services:
       retries: 10
       start_period: 5s
 
+  dashboard:
+    build:
+      context: ./services/dashboard
+      dockerfile: Dockerfile
+    container_name: riskflow1-dashboard
+    restart: unless-stopped
+    environment:
+      DASHBOARD_API_URL: http://payment-api:8080
+      DASHBOARD_API_TOKEN: ${DASHBOARD_API_TOKEN}
+      DASHBOARD_RECENT_LIMIT: ${DASHBOARD_RECENT_LIMIT:-20}
+      DASHBOARD_FETCH_TIMEOUT_MS: ${DASHBOARD_FETCH_TIMEOUT_MS:-7000}
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    depends_on:
+      payment-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:3000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   outbox-publisher:
     build:
       context: .

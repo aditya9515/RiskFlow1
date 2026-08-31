@@ -12,6 +12,11 @@ coverage.out
 .audit-gocache/
 .cache/
 
+# Node and Next.js artifacts
+node_modules/
+.next/
+*.tsbuildinfo
+
 # Python environments, caches, and build artifacts
 .venv/
 __pycache__/
