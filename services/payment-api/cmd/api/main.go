@@ -8,7 +8,9 @@ import (
 	"syscall"
 
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/config"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/dashboard"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/database"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/decision"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/httpapi"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/payment"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/review"
@@ -45,6 +47,17 @@ func run() int {
 	paymentService := payment.NewService(paymentRepository)
 	reviewRepository := review.NewPostgresRepository(pool)
 	reviewService := review.NewService(reviewRepository)
+	dashboardRepository := dashboard.NewPostgresRepository(pool)
+	reconciler, err := decision.NewReconciler(pool, cfg.ReconciliationGrace)
+	if err != nil {
+		logger.Error("create dashboard reconciler", slog.String("error", err.Error()))
+		return 1
+	}
+	dashboardService, err := dashboard.NewService(dashboardRepository, reconciler)
+	if err != nil {
+		logger.Error("create dashboard service", slog.String("error", err.Error()))
+		return 1
+	}
 	reviewAuthenticator, err := review.NewTokenAuthenticator(cfg.ReviewCredentials)
 	if err != nil {
 		logger.Error("create review authenticator", slog.String("error", err.Error()))
@@ -55,10 +68,12 @@ func run() int {
 		pool,
 		paymentService,
 		reviewService,
+		dashboardService,
 		reviewAuthenticator,
 		cfg.ReadinessTimeout,
 		cfg.PaymentTimeout,
 		cfg.ReviewTimeout,
+		cfg.DashboardTimeout,
 		logger,
 	)
 	httpServer := server.New(cfg.HTTPAddr, handler, cfg.ShutdownTimeout, logger)

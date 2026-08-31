@@ -46,7 +46,7 @@ func newReviewHTTPHandler(t *testing.T, service ReviewService) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewHandler(&fakePinger{}, nil, service, authenticator, time.Second, 3*time.Second, 3*time.Second, discardLogger())
+	return NewHandler(&fakePinger{}, nil, service, nil, authenticator, time.Second, 3*time.Second, 3*time.Second, 5*time.Second, discardLogger())
 }
 
 func TestReviewListAllowsAuditor(t *testing.T) {

@@ -30,6 +30,12 @@ func TestLoadValidDefaults(t *testing.T) {
 	if cfg.ReviewTimeout != 3*time.Second {
 		t.Fatalf("ReviewTimeout = %s, want 3s", cfg.ReviewTimeout)
 	}
+	if cfg.DashboardTimeout != 5*time.Second {
+		t.Fatalf("DashboardTimeout = %s, want 5s", cfg.DashboardTimeout)
+	}
+	if cfg.ReconciliationGrace != 30*time.Second {
+		t.Fatalf("ReconciliationGrace = %s, want 30s", cfg.ReconciliationGrace)
+	}
 	if len(cfg.ReviewCredentials) != 2 {
 		t.Fatalf("ReviewCredentials count = %d, want 2", len(cfg.ReviewCredentials))
 	}
@@ -79,6 +85,30 @@ func TestLoadRejectsInvalidReviewTimeout(t *testing.T) {
 	}))
 	if err == nil || !strings.Contains(err.Error(), "REVIEW_REQUEST_TIMEOUT") {
 		t.Fatalf("error = %v, want invalid review timeout error", err)
+	}
+}
+
+func TestLoadRejectsInvalidDashboardConfiguration(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		key  string
+	}{
+		{name: "dashboard timeout", key: "DASHBOARD_REQUEST_TIMEOUT"},
+		{name: "reconciliation grace", key: "RECONCILIATION_GRACE_PERIOD"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			values := map[string]string{
+				"DATABASE_URL":                 "postgres://localhost/riskflow",
+				"REVIEW_AUTH_CREDENTIALS_JSON": validReviewCredentialsJSON,
+				tt.key:                         "0s",
+			}
+			if _, err := load(mapLookup(values)); err == nil || !strings.Contains(err.Error(), tt.key) {
+				t.Fatalf("error = %v, want %s error", err, tt.key)
+			}
+		})
 	}
 }
 

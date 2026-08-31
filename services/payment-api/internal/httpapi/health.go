@@ -34,10 +34,12 @@ func NewHandler(
 	pinger Pinger,
 	payments PaymentService,
 	reviews ReviewService,
+	dashboard DashboardService,
 	reviewAuth ReviewAuthenticator,
 	readinessTimeout time.Duration,
 	paymentTimeout time.Duration,
 	reviewTimeout time.Duration,
+	dashboardTimeout time.Duration,
 	logger *slog.Logger,
 ) http.Handler {
 	if logger == nil {
@@ -71,6 +73,9 @@ func NewHandler(
 		mux.Handle("GET /v1/reviews", listReviewsHandler(reviews, reviewAuth, reviewTimeout, logger))
 		mux.Handle("POST /v1/reviews/{id}/approve", resolveReviewHandler(reviews, reviewAuth, reviewTimeout, "APPROVE", logger))
 		mux.Handle("POST /v1/reviews/{id}/reject", resolveReviewHandler(reviews, reviewAuth, reviewTimeout, "REJECT", logger))
+	}
+	if dashboard != nil && reviewAuth != nil {
+		mux.Handle("GET /v1/dashboard", dashboardHandler(dashboard, reviewAuth, dashboardTimeout, logger))
 	}
 
 	return mux

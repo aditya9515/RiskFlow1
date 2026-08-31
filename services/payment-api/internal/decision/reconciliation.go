@@ -24,6 +24,14 @@ type ReconciliationReport struct {
 	Exceptions     []ReconciliationException `json:"exceptions"`
 }
 
+// ReconciliationCounts is the bounded summary used by frequently refreshed views.
+type ReconciliationCounts struct {
+	GeneratedAt    time.Time
+	GracePeriod    string
+	ExceptionCount int64
+	ByCode         map[string]int64
+}
+
 // Reconciler compares payment, decision, receipt, and review-queue state.
 type Reconciler struct {
 	pool        *pgxpool.Pool
@@ -71,7 +79,37 @@ func (r *Reconciler) Run(ctx context.Context) (ReconciliationReport, error) {
 	}, nil
 }
 
-const reconciliationSQL = `
+// Count runs the same controls as Run but returns only grouped counts.
+func (r *Reconciler) Count(ctx context.Context) (ReconciliationCounts, error) {
+	generatedAt := r.now().UTC()
+	cutoff := generatedAt.Add(-r.gracePeriod)
+	rows, err := r.pool.Query(ctx, reconciliationCountSQL, cutoff)
+	if err != nil {
+		return ReconciliationCounts{}, fmt.Errorf("query decision reconciliation counts: %w", err)
+	}
+	defer rows.Close()
+
+	result := ReconciliationCounts{
+		GeneratedAt: generatedAt,
+		GracePeriod: r.gracePeriod.String(),
+		ByCode:      make(map[string]int64),
+	}
+	for rows.Next() {
+		var code string
+		var count int64
+		if err := rows.Scan(&code, &count); err != nil {
+			return ReconciliationCounts{}, fmt.Errorf("scan decision reconciliation counts: %w", err)
+		}
+		result.ByCode[code] = count
+		result.ExceptionCount += count
+	}
+	if err := rows.Err(); err != nil {
+		return ReconciliationCounts{}, fmt.Errorf("iterate decision reconciliation counts: %w", err)
+	}
+	return result, nil
+}
+
+const reconciliationExceptionsSQL = `
 WITH exceptions AS (
     SELECT
         'MISSING_DECISION'::text AS code,
@@ -163,7 +201,15 @@ WITH exceptions AS (
         format('%s[%s] offset %s rejected: %s', source_topic, source_partition, source_offset, error_message)
     FROM decision_ingestion_records
     WHERE disposition = 'REJECTED'
-)
+ )`
+
+const reconciliationSQL = reconciliationExceptionsSQL + `
 SELECT code, payment_id, decision_id, detail
 FROM exceptions
 ORDER BY code, payment_id, decision_id, detail`
+
+const reconciliationCountSQL = reconciliationExceptionsSQL + `
+SELECT code, count(*)
+FROM exceptions
+GROUP BY code
+ORDER BY code`

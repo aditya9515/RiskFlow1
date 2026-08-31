@@ -20,19 +20,22 @@ const (
 	defaultReadinessTimeout = time.Second
 	defaultPaymentTimeout   = 3 * time.Second
 	defaultReviewTimeout    = 3 * time.Second
+	defaultDashboardTimeout = 5 * time.Second
 	defaultShutdownTimeout  = 10 * time.Second
 )
 
 // Config contains the process configuration loaded from environment variables.
 type Config struct {
-	DatabaseURL       string
-	HTTPAddr          string
-	ReadinessTimeout  time.Duration
-	PaymentTimeout    time.Duration
-	ReviewTimeout     time.Duration
-	ShutdownTimeout   time.Duration
-	LogLevel          slog.Level
-	ReviewCredentials []review.Credential
+	DatabaseURL         string
+	HTTPAddr            string
+	ReadinessTimeout    time.Duration
+	PaymentTimeout      time.Duration
+	ReviewTimeout       time.Duration
+	DashboardTimeout    time.Duration
+	ReconciliationGrace time.Duration
+	ShutdownTimeout     time.Duration
+	LogLevel            slog.Level
+	ReviewCredentials   []review.Credential
 }
 
 // Load reads and validates configuration from the process environment.
@@ -66,6 +69,14 @@ func load(lookup lookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	dashboardTimeout, err := duration(lookup, "DASHBOARD_REQUEST_TIMEOUT", defaultDashboardTimeout)
+	if err != nil {
+		return Config{}, err
+	}
+	reconciliationGrace, err := duration(lookup, "RECONCILIATION_GRACE_PERIOD", defaultReconciliationGrace)
+	if err != nil {
+		return Config{}, err
+	}
 
 	shutdownTimeout, err := duration(lookup, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout)
 	if err != nil {
@@ -83,14 +94,16 @@ func load(lookup lookupEnv) (Config, error) {
 	}
 
 	return Config{
-		DatabaseURL:       databaseURL,
-		HTTPAddr:          httpAddr,
-		ReadinessTimeout:  readinessTimeout,
-		PaymentTimeout:    paymentTimeout,
-		ReviewTimeout:     reviewTimeout,
-		ShutdownTimeout:   shutdownTimeout,
-		LogLevel:          logLevel,
-		ReviewCredentials: reviewCredentials,
+		DatabaseURL:         databaseURL,
+		HTTPAddr:            httpAddr,
+		ReadinessTimeout:    readinessTimeout,
+		PaymentTimeout:      paymentTimeout,
+		ReviewTimeout:       reviewTimeout,
+		DashboardTimeout:    dashboardTimeout,
+		ReconciliationGrace: reconciliationGrace,
+		ShutdownTimeout:     shutdownTimeout,
+		LogLevel:            logLevel,
+		ReviewCredentials:   reviewCredentials,
 	}, nil
 }
 

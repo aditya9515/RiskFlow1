@@ -178,6 +178,19 @@ Approval maps the payment from `REVIEW` to `ALLOWED`; rejection maps it to `BLOC
 
 See [manual-review controls](docs/manual-review-controls.md) for roles, endpoint contracts, reason-code rules, optimistic locking, and operational queries.
 
+## Operational dashboard API
+
+The role-protected `GET /v1/dashboard` endpoint exposes one bounded, read-only operational snapshot for the future Next.js dashboard. It includes payment totals/statuses, automated decision counts and average score, recent decisions and reason codes, pending manual reviews, outbox and decision-ingestion failures, reconciliation counts, and the most recently used rule/model versions.
+
+```powershell
+$auditorToken = "your_local_auditor_token"
+Invoke-RestMethod -Method Get `
+    -Uri "http://localhost:8080/v1/dashboard?recent_limit=20" `
+    -Headers @{ Authorization = "Bearer $auditorToken" }
+```
+
+Core totals are read in one PostgreSQL `REPEATABLE READ`, read-only transaction. Reconciliation uses a separate count-only execution of the existing control rules. See [the operational dashboard API](docs/operational-dashboard-api.md) for field semantics, access control, consistency boundaries, and verification queries.
+
 ## Streaming lake ingestion
 
 The `streaming-analytics` service uses Spark Structured Streaming to consume `payments.created` and `risk.decisions` through one Kafka source. It applies explicit schema and field validation before writing curated Parquet datasets. Invalid JSON, unsupported schema versions, missing fields, inconsistent IDs, and invalid scores are written to a separate quarantine dataset with the original Kafka topic, partition, offset, record bytes, and readable error codes.
