@@ -17,6 +17,18 @@ type WorkerConfig struct {
 	RetryMax       time.Duration
 }
 
+// Metrics is deliberately small so worker behavior remains testable without a
+// metrics backend. Implementations must keep result and stage labels bounded.
+type Metrics interface {
+	ObservePublish(string, time.Duration)
+	IncrementRetry(string)
+}
+
+type noopMetrics struct{}
+
+func (noopMetrics) ObservePublish(string, time.Duration) {}
+func (noopMetrics) IncrementRetry(string)                {}
+
 // Worker continuously moves durable outbox events to a broker.
 type Worker struct {
 	store     Store
@@ -24,10 +36,11 @@ type Worker struct {
 	config    WorkerConfig
 	logger    *slog.Logger
 	sleep     func(context.Context, time.Duration) bool
+	metrics   Metrics
 }
 
 // NewWorker validates dependencies and constructs an outbox worker.
-func NewWorker(store Store, publisher Publisher, config WorkerConfig, logger *slog.Logger) (*Worker, error) {
+func NewWorker(store Store, publisher Publisher, config WorkerConfig, logger *slog.Logger, metricSets ...Metrics) (*Worker, error) {
 	if store == nil {
 		return nil, fmt.Errorf("outbox store is required")
 	}
@@ -44,12 +57,18 @@ func NewWorker(store Store, publisher Publisher, config WorkerConfig, logger *sl
 		logger = slog.Default()
 	}
 
+	metrics := Metrics(noopMetrics{})
+	if len(metricSets) > 0 && metricSets[0] != nil {
+		metrics = metricSets[0]
+	}
+
 	return &Worker{
 		store:     store,
 		publisher: publisher,
 		config:    config,
 		logger:    logger,
 		sleep:     sleepContext,
+		metrics:   metrics,
 	}, nil
 }
 
@@ -72,6 +91,8 @@ func (w *Worker) Run(ctx context.Context) error {
 			message := "outbox publish attempt failed"
 			if isPermanent(err) {
 				message = "outbox event quarantined"
+			} else {
+				w.metrics.IncrementRetry("delivery")
 			}
 			w.logger.ErrorContext(ctx, message,
 				slog.String("error", err.Error()),
@@ -91,7 +112,18 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) publish(ctx context.Context, event Event) error {
+func (w *Worker) publish(ctx context.Context, event Event) (publishErr error) {
+	startedAt := time.Now()
+	result := "success"
+	defer func() {
+		if publishErr != nil {
+			result = "retryable_error"
+			if isPermanent(publishErr) {
+				result = "quarantined"
+			}
+		}
+		w.metrics.ObservePublish(result, time.Since(startedAt))
+	}()
 	if event.EventType != paymentsCreatedEventType {
 		return permanent(fmt.Errorf("unsupported event_type %q", event.EventType))
 	}

@@ -33,6 +33,9 @@ func TestLoadValidDefaults(t *testing.T) {
 	if cfg.DashboardTimeout != 5*time.Second {
 		t.Fatalf("DashboardTimeout = %s, want 5s", cfg.DashboardTimeout)
 	}
+	if cfg.MetricsTimeout != time.Second {
+		t.Fatalf("MetricsTimeout = %s, want 1s", cfg.MetricsTimeout)
+	}
 	if cfg.ReconciliationGrace != 30*time.Second {
 		t.Fatalf("ReconciliationGrace = %s, want 30s", cfg.ReconciliationGrace)
 	}
@@ -154,6 +157,13 @@ func TestLoadRejectsInvalidDurations(t *testing.T) {
 			env: map[string]string{
 				"DATABASE_URL":     "postgres://localhost/riskflow",
 				"SHUTDOWN_TIMEOUT": "-1s",
+			},
+		},
+		{
+			name: "zero metrics duration",
+			env: map[string]string{
+				"DATABASE_URL":               "postgres://localhost/riskflow",
+				"METRICS_COLLECTION_TIMEOUT": "0s",
 			},
 		},
 	}

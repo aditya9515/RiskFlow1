@@ -10,6 +10,9 @@ import (
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/config"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/database"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/decision"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/observability"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/server"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -43,10 +46,12 @@ func run() int {
 		logger.Error("create decision Kafka consumer", slog.String("error", err.Error()))
 		return 1
 	}
+	registry := observability.NewRegistry("risk-decision-consumer")
+	decisionMetrics := observability.NewDecisionMetrics(registry)
 	worker, err := decision.NewWorker(consumer, store, decision.WorkerConfig{
 		ProcessTimeout: cfg.ProcessTimeout,
 		RetryBackoff:   cfg.RetryBackoff,
-	}, logger)
+	}, logger, decisionMetrics)
 	if err != nil {
 		consumer.Close()
 		logger.Error("create decision persistence worker", slog.String("error", err.Error()))
@@ -58,7 +63,11 @@ func run() int {
 		slog.String("consumer_group", cfg.ConsumerGroup),
 		slog.String("auto_offset_reset", cfg.AutoOffsetReset),
 	)
-	if err := worker.Run(ctx); err != nil {
+	metricsServer := server.New(cfg.MetricsAddr, observability.WorkerHandler(registry), cfg.MetricsShutdownTimeout, logger)
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error { return worker.Run(groupCtx) })
+	group.Go(func() error { return metricsServer.Run(groupCtx) })
+	if err := group.Wait(); err != nil {
 		logger.Error("risk decision consumer stopped with an error", slog.String("error", err.Error()))
 		return 1
 	}

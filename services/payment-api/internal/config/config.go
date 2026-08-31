@@ -21,6 +21,8 @@ const (
 	defaultPaymentTimeout   = 3 * time.Second
 	defaultReviewTimeout    = 3 * time.Second
 	defaultDashboardTimeout = 5 * time.Second
+	defaultMetricsTimeout   = time.Second
+	defaultMetricsShutdown  = 5 * time.Second
 	defaultShutdownTimeout  = 10 * time.Second
 )
 
@@ -32,6 +34,7 @@ type Config struct {
 	PaymentTimeout      time.Duration
 	ReviewTimeout       time.Duration
 	DashboardTimeout    time.Duration
+	MetricsTimeout      time.Duration
 	ReconciliationGrace time.Duration
 	ShutdownTimeout     time.Duration
 	LogLevel            slog.Level
@@ -73,6 +76,10 @@ func load(lookup lookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	metricsTimeout, err := duration(lookup, "METRICS_COLLECTION_TIMEOUT", defaultMetricsTimeout)
+	if err != nil {
+		return Config{}, err
+	}
 	reconciliationGrace, err := duration(lookup, "RECONCILIATION_GRACE_PERIOD", defaultReconciliationGrace)
 	if err != nil {
 		return Config{}, err
@@ -100,6 +107,7 @@ func load(lookup lookupEnv) (Config, error) {
 		PaymentTimeout:      paymentTimeout,
 		ReviewTimeout:       reviewTimeout,
 		DashboardTimeout:    dashboardTimeout,
+		MetricsTimeout:      metricsTimeout,
 		ReconciliationGrace: reconciliationGrace,
 		ShutdownTimeout:     shutdownTimeout,
 		LogLevel:            logLevel,

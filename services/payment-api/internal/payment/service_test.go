@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/correlation"
 )
 
 type capturingRepository struct {
@@ -88,6 +90,35 @@ func TestServiceRejectsInvalidRequestBeforeRepository(t *testing.T) {
 	}
 	if repository.payment.ID != "" {
 		t.Fatal("repository was called for invalid request")
+	}
+}
+
+func TestServiceUsesHTTPTraceIDWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	repository := &capturingRepository{}
+	service := NewService(repository)
+	identifiers := []string{
+		"10000000-0000-4000-8000-000000000001",
+		"10000000-0000-4000-8000-000000000002",
+	}
+	service.newID = func() (string, error) {
+		identifier := identifiers[0]
+		identifiers = identifiers[1:]
+		return identifier, nil
+	}
+
+	requestID := "30000000-0000-4000-8000-000000000003"
+	ctx := correlation.WithRequestID(context.Background(), requestID)
+	_, err := service.Create(ctx, "key-1", CreateRequest{
+		CustomerID: "customer-1", MerchantID: "merchant-1", DeviceID: "device-1",
+		AmountMinor: 2500, Currency: "USD", Country: "IN",
+	})
+	if err != nil {
+		t.Fatalf("create payment: %v", err)
+	}
+	if repository.event.TraceID != requestID {
+		t.Fatalf("event trace ID = %q, want %q", repository.event.TraceID, requestID)
 	}
 }
 

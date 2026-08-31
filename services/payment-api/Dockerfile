@@ -22,11 +22,15 @@ FROM runtime AS outbox-publisher
 
 COPY --from=build /out/outbox-publisher /usr/local/bin/outbox-publisher
 
+EXPOSE 9091
+
 ENTRYPOINT ["/usr/local/bin/outbox-publisher"]
 
 FROM runtime AS risk-decision-consumer
 
 COPY --from=build /out/risk-decision-consumer /usr/local/bin/risk-decision-consumer
+
+EXPOSE 9092
 
 ENTRYPOINT ["/usr/local/bin/risk-decision-consumer"]
 

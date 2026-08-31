@@ -42,6 +42,36 @@ func NewHandler(
 	dashboardTimeout time.Duration,
 	logger *slog.Logger,
 ) http.Handler {
+	return NewHandlerWithMetrics(
+		pinger,
+		payments,
+		reviews,
+		dashboard,
+		reviewAuth,
+		readinessTimeout,
+		paymentTimeout,
+		reviewTimeout,
+		dashboardTimeout,
+		nil,
+		logger,
+	)
+}
+
+// NewHandlerWithMetrics builds the public API plus an optional Prometheus
+// scrape route. NewHandler remains available for focused handler tests.
+func NewHandlerWithMetrics(
+	pinger Pinger,
+	payments PaymentService,
+	reviews ReviewService,
+	dashboard DashboardService,
+	reviewAuth ReviewAuthenticator,
+	readinessTimeout time.Duration,
+	paymentTimeout time.Duration,
+	reviewTimeout time.Duration,
+	dashboardTimeout time.Duration,
+	metricsHandler http.Handler,
+	logger *slog.Logger,
+) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -76,6 +106,9 @@ func NewHandler(
 	}
 	if dashboard != nil && reviewAuth != nil {
 		mux.Handle("GET /v1/dashboard", dashboardHandler(dashboard, reviewAuth, dashboardTimeout, logger))
+	}
+	if metricsHandler != nil {
+		mux.Handle("GET /metrics", metricsHandler)
 	}
 
 	return mux

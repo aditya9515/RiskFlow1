@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/correlation"
 )
 
 // Repository persists and retrieves payments.
@@ -51,9 +53,12 @@ func (s *Service) Create(ctx context.Context, idempotencyKey string, request Cre
 	if err != nil {
 		return CreateResult{}, fmt.Errorf("generate event ID: %w", err)
 	}
-	traceID, err := s.newID()
-	if err != nil {
-		return CreateResult{}, fmt.Errorf("generate trace ID: %w", err)
+	traceID := correlation.RequestID(ctx)
+	if traceID == "" {
+		traceID, err = s.newID()
+		if err != nil {
+			return CreateResult{}, fmt.Errorf("generate trace ID: %w", err)
+		}
 	}
 
 	now := s.now().UTC()

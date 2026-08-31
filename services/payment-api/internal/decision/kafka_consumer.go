@@ -45,16 +45,27 @@ func NewKafkaConsumer(brokers []string, topic, group, autoOffsetReset string) (*
 func (c *KafkaConsumer) Poll(ctx context.Context) (SourceRecord, error) {
 	for {
 		fetches := c.client.PollRecords(ctx, 1)
-		records := fetches.Records()
-		if len(records) > 0 {
-			record := records[0]
-			return SourceRecord{
+		var source *SourceRecord
+		fetches.EachPartition(func(partition kgo.FetchTopicPartition) {
+			if source != nil || len(partition.Records) == 0 {
+				return
+			}
+			record := partition.Records[0]
+			lag := partition.HighWatermark - record.Offset - 1
+			if lag < 0 {
+				lag = 0
+			}
+			source = &SourceRecord{
 				Topic:       record.Topic,
 				Partition:   record.Partition,
 				Offset:      record.Offset,
 				LeaderEpoch: record.LeaderEpoch,
+				Lag:         lag,
 				Value:       record.Value,
-			}, nil
+			}
+		})
+		if source != nil {
+			return *source, nil
 		}
 		if errs := fetches.Errors(); len(errs) > 0 {
 			return SourceRecord{}, fmt.Errorf("fetch Kafka decision: %w", errs[0].Err)

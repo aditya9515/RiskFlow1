@@ -9,7 +9,10 @@ import (
 
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/config"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/database"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/observability"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/outbox"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/server"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -48,6 +51,8 @@ func run() int {
 		logger.Error("create outbox store", slog.String("error", err.Error()))
 		return 1
 	}
+	registry := observability.NewRegistry("outbox-publisher")
+	outboxMetrics := observability.NewOutboxMetrics(registry)
 
 	worker, err := outbox.NewWorker(
 		store,
@@ -60,6 +65,7 @@ func run() int {
 			RetryMax:       cfg.RetryMax,
 		},
 		logger,
+		outboxMetrics,
 	)
 	if err != nil {
 		logger.Error("create outbox worker", slog.String("error", err.Error()))
@@ -70,7 +76,11 @@ func run() int {
 		slog.String("topic", cfg.KafkaTopic),
 		slog.Any("brokers", cfg.KafkaBrokers),
 	)
-	if err := worker.Run(ctx); err != nil {
+	metricsServer := server.New(cfg.MetricsAddr, observability.WorkerHandler(registry), cfg.MetricsShutdownTimeout, logger)
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error { return worker.Run(groupCtx) })
+	group.Go(func() error { return metricsServer.Run(groupCtx) })
+	if err := group.Wait(); err != nil {
 		logger.Error("outbox publisher stopped with an error", slog.String("error", err.Error()))
 		return 1
 	}

@@ -24,6 +24,8 @@ func TestWorkerCommitsOnlyAfterDatabaseApply(t *testing.T) {
 		return ApplyResult{Applied: true}, nil
 	}}
 	worker := newTestWorker(t, consumer, store)
+	metrics := &capturingDecisionMetrics{}
+	worker.metrics = metrics
 
 	if err := worker.Run(ctx); err != nil {
 		t.Fatalf("run worker: %v", err)
@@ -33,6 +35,9 @@ func TestWorkerCommitsOnlyAfterDatabaseApply(t *testing.T) {
 	}
 	if consumer.allowCalls != 1 || consumer.closeCalls != 1 {
 		t.Fatalf("allow/close calls = %d/%d", consumer.allowCalls, consumer.closeCalls)
+	}
+	if len(metrics.records) != 1 || metrics.records[0].disposition != dispositionApplied || metrics.records[0].record.Lag != 7 {
+		t.Fatalf("record metrics = %+v", metrics.records)
 	}
 }
 
@@ -44,6 +49,8 @@ func TestWorkerRetainsOffsetWhenDatabaseFails(t *testing.T) {
 		return ApplyResult{}, errors.New("database unavailable")
 	}}
 	worker := newTestWorker(t, consumer, store)
+	metrics := &capturingDecisionMetrics{}
+	worker.metrics = metrics
 	worker.wait = func(context.Context, time.Duration) bool { return false }
 
 	if err := worker.Run(context.Background()); err != nil {
@@ -54,6 +61,9 @@ func TestWorkerRetainsOffsetWhenDatabaseFails(t *testing.T) {
 	}
 	if store.applyCalls != 1 {
 		t.Fatalf("apply calls = %d, want 1", store.applyCalls)
+	}
+	if len(metrics.retries) != 1 || metrics.retries[0] != "persistence" {
+		t.Fatalf("retry metrics = %v", metrics.retries)
 	}
 }
 
@@ -134,7 +144,25 @@ func newTestWorker(t *testing.T, consumer Consumer, store Store) *Worker {
 }
 
 func validSourceRecord() SourceRecord {
-	return SourceRecord{Topic: "risk.decisions", Partition: 1, Offset: 42, Value: validEventValue()}
+	return SourceRecord{Topic: "risk.decisions", Partition: 1, Offset: 42, Lag: 7, Value: validEventValue()}
+}
+
+type observedDecisionRecord struct {
+	disposition string
+	record      SourceRecord
+}
+
+type capturingDecisionMetrics struct {
+	retries []string
+	records []observedDecisionRecord
+}
+
+func (m *capturingDecisionMetrics) IncrementRetry(stage string) {
+	m.retries = append(m.retries, stage)
+}
+
+func (m *capturingDecisionMetrics) ObserveRecord(disposition string, _ time.Duration, _ time.Duration, _ bool, record SourceRecord) {
+	m.records = append(m.records, observedDecisionRecord{disposition: disposition, record: record})
 }
 
 type fakeConsumer struct {

@@ -54,6 +54,20 @@ Invoke-RestMethod http://localhost:8080/readyz
 - `/healthz` reports whether the API process is alive and never queries PostgreSQL.
 - `/readyz` reports whether PostgreSQL can answer within the configured readiness timeout.
 
+## Observability
+
+The Go API emits structured JSON request logs, returns a UUIDv4 `X-Request-ID`, and reuses that identifier as the payment event `trace_id`. A valid caller-supplied UUIDv4 is preserved; arbitrary values are replaced so they cannot inject log content or create unsafe trace identifiers.
+
+Prometheus-compatible metrics are exposed at:
+
+- payment API: `http://localhost:8080/metrics`;
+- outbox publisher: port `9091` inside its container;
+- risk-decision consumer: port `9092` inside its container.
+
+The worker ports are intentionally internal-only in Compose. Prometheus can scrape them over the Compose network, while local verification can run `wget` inside each container. Metrics cover normalized HTTP routes and latency, in-flight requests, outbox state and publish outcomes, decision persistence outcomes and latency, retry stages, approximate consumer lag, rejected records, and pending reviews. Labels are limited to known routes, states, outcomes, stages, topics, and partitions—never payment, event, customer, or request IDs.
+
+PostgreSQL-backed gauges use a separate one-second deadline. If PostgreSQL is unavailable, `/metrics` stays responsive and reports `riskflow_postgres_metrics_collection_success 0` without exporting stale queue counts. See [observability and metrics](docs/observability.md) for metric names, scrape examples, and failure semantics.
+
 ## Create a payment
 
 Amounts use integer minor units, so `1250` means USD 12.50 rather than a floating-point value.

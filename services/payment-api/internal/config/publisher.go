@@ -16,18 +16,21 @@ const (
 	defaultOutboxPublishTimeout = 5 * time.Second
 	defaultOutboxRetryMin       = 100 * time.Millisecond
 	defaultOutboxRetryMax       = 5 * time.Second
+	defaultOutboxMetricsAddr    = ":9091"
 )
 
 // PublisherConfig contains the outbox-publisher process configuration.
 type PublisherConfig struct {
-	DatabaseURL    string
-	KafkaBrokers   []string
-	KafkaTopic     string
-	PollInterval   time.Duration
-	PublishTimeout time.Duration
-	RetryMin       time.Duration
-	RetryMax       time.Duration
-	LogLevel       slog.Level
+	DatabaseURL            string
+	KafkaBrokers           []string
+	KafkaTopic             string
+	PollInterval           time.Duration
+	PublishTimeout         time.Duration
+	RetryMin               time.Duration
+	RetryMax               time.Duration
+	MetricsAddr            string
+	MetricsShutdownTimeout time.Duration
+	LogLevel               slog.Level
 }
 
 // LoadPublisher reads and validates outbox-publisher configuration from the
@@ -71,6 +74,14 @@ func loadPublisher(lookup lookupEnv) (PublisherConfig, error) {
 	if retryMax < retryMin {
 		return PublisherConfig{}, fmt.Errorf("OUTBOX_RETRY_MAX_BACKOFF must be greater than or equal to OUTBOX_RETRY_MIN_BACKOFF")
 	}
+	metricsAddr := strings.TrimSpace(value(lookup, "OUTBOX_METRICS_ADDR", defaultOutboxMetricsAddr))
+	if err := validateHTTPAddr(metricsAddr); err != nil {
+		return PublisherConfig{}, fmt.Errorf("OUTBOX_METRICS_ADDR: %w", err)
+	}
+	metricsShutdownTimeout, err := duration(lookup, "METRICS_SHUTDOWN_TIMEOUT", defaultMetricsShutdown)
+	if err != nil {
+		return PublisherConfig{}, err
+	}
 
 	logLevel, err := parseLogLevel(value(lookup, "LOG_LEVEL", "info"))
 	if err != nil {
@@ -78,14 +89,16 @@ func loadPublisher(lookup lookupEnv) (PublisherConfig, error) {
 	}
 
 	return PublisherConfig{
-		DatabaseURL:    databaseURL,
-		KafkaBrokers:   brokers,
-		KafkaTopic:     topic,
-		PollInterval:   pollInterval,
-		PublishTimeout: publishTimeout,
-		RetryMin:       retryMin,
-		RetryMax:       retryMax,
-		LogLevel:       logLevel,
+		DatabaseURL:            databaseURL,
+		KafkaBrokers:           brokers,
+		KafkaTopic:             topic,
+		PollInterval:           pollInterval,
+		PublishTimeout:         publishTimeout,
+		RetryMin:               retryMin,
+		RetryMax:               retryMax,
+		MetricsAddr:            metricsAddr,
+		MetricsShutdownTimeout: metricsShutdownTimeout,
+		LogLevel:               logLevel,
 	}, nil
 }
 

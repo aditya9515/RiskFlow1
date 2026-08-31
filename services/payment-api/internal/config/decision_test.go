@@ -25,6 +25,9 @@ func TestLoadDecisionConsumerDefaults(t *testing.T) {
 	if cfg.ProcessTimeout != 5*time.Second || cfg.RetryBackoff != time.Second {
 		t.Fatalf("process/retry = %s/%s", cfg.ProcessTimeout, cfg.RetryBackoff)
 	}
+	if cfg.MetricsAddr != ":9092" || cfg.MetricsShutdownTimeout != 5*time.Second {
+		t.Fatalf("metrics addr/shutdown = %q/%s", cfg.MetricsAddr, cfg.MetricsShutdownTimeout)
+	}
 }
 
 func TestLoadDecisionConsumerRejectsInvalidValues(t *testing.T) {
@@ -42,6 +45,8 @@ func TestLoadDecisionConsumerRejectsInvalidValues(t *testing.T) {
 		{name: "offset reset", overrides: map[string]string{"DECISION_AUTO_OFFSET_RESET": "middle"}, want: "DECISION_AUTO_OFFSET_RESET"},
 		{name: "timeout", overrides: map[string]string{"DECISION_PROCESS_TIMEOUT": "0s"}, want: "DECISION_PROCESS_TIMEOUT"},
 		{name: "retry", overrides: map[string]string{"DECISION_RETRY_BACKOFF": "later"}, want: "DECISION_RETRY_BACKOFF"},
+		{name: "metrics address", overrides: map[string]string{"DECISION_METRICS_ADDR": "9092"}, want: "DECISION_METRICS_ADDR"},
+		{name: "metrics shutdown", overrides: map[string]string{"METRICS_SHUTDOWN_TIMEOUT": "0s"}, want: "METRICS_SHUTDOWN_TIMEOUT"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

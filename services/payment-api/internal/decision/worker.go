@@ -23,6 +23,18 @@ type WorkerConfig struct {
 	RetryBackoff   time.Duration
 }
 
+// Metrics is the bounded observability surface used by the persistence loop.
+type Metrics interface {
+	IncrementRetry(string)
+	ObserveRecord(string, time.Duration, time.Duration, bool, SourceRecord)
+}
+
+type noopMetrics struct{}
+
+func (noopMetrics) IncrementRetry(string) {}
+func (noopMetrics) ObserveRecord(string, time.Duration, time.Duration, bool, SourceRecord) {
+}
+
 // Worker consumes risk decisions one record at a time.
 type Worker struct {
 	consumer Consumer
@@ -30,9 +42,11 @@ type Worker struct {
 	config   WorkerConfig
 	logger   *slog.Logger
 	wait     func(context.Context, time.Duration) bool
+	metrics  Metrics
+	now      func() time.Time
 }
 
-func NewWorker(consumer Consumer, store Store, config WorkerConfig, logger *slog.Logger) (*Worker, error) {
+func NewWorker(consumer Consumer, store Store, config WorkerConfig, logger *slog.Logger, metricSets ...Metrics) (*Worker, error) {
 	if consumer == nil {
 		return nil, errors.New("decision consumer is required")
 	}
@@ -45,12 +59,18 @@ func NewWorker(consumer Consumer, store Store, config WorkerConfig, logger *slog
 	if logger == nil {
 		logger = slog.Default()
 	}
+	metrics := Metrics(noopMetrics{})
+	if len(metricSets) > 0 && metricSets[0] != nil {
+		metrics = metricSets[0]
+	}
 	return &Worker{
 		consumer: consumer,
 		store:    store,
 		config:   config,
 		logger:   logger,
 		wait:     waitContext,
+		metrics:  metrics,
+		now:      time.Now,
 	}, nil
 }
 
@@ -69,6 +89,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil
 			}
+			w.metrics.IncrementRetry("poll")
 			w.logger.ErrorContext(ctx, "poll risk decision", slog.String("error", err.Error()))
 			if !w.wait(ctx, w.config.RetryBackoff) {
 				return nil
@@ -76,6 +97,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			continue
 		}
 
+		startedAt := w.now()
 		for {
 			attemptCtx, cancel := context.WithTimeout(ctx, w.config.ProcessTimeout)
 			result, handleErr := w.handle(attemptCtx, record)
@@ -85,6 +107,7 @@ func (w *Worker) Run(ctx context.Context) error {
 					w.consumer.AllowRebalance()
 					return nil
 				}
+				w.metrics.IncrementRetry("persistence")
 				w.logger.ErrorContext(ctx, "persist risk decision; offset retained for retry",
 					slog.String("error", handleErr.Error()),
 					slog.String("topic", record.Topic),
@@ -105,13 +128,30 @@ func (w *Worker) Run(ctx context.Context) error {
 			if commitErr != nil {
 				// Stop so a fresh group session resumes from Kafka's last durable
 				// offset. PostgreSQL idempotency makes the redelivery harmless.
+				w.metrics.IncrementRetry("offset_commit")
 				return fmt.Errorf("commit risk decision Kafka offset: %w", commitErr)
 			}
+
+			completedAt := w.now()
+			processing := completedAt.Sub(startedAt)
+			if processing < 0 {
+				processing = 0
+			}
+			endToEnd := time.Duration(0)
+			hasEndToEnd := !result.decisionAt.IsZero()
+			if hasEndToEnd {
+				endToEnd = completedAt.Sub(result.decisionAt)
+				if endToEnd < 0 {
+					endToEnd = 0
+				}
+			}
+			w.metrics.ObserveRecord(result.disposition, processing, endToEnd, hasEndToEnd, record)
 
 			w.logger.InfoContext(ctx, "risk decision record persisted",
 				slog.String("disposition", result.disposition),
 				slog.String("event_id", result.eventID),
 				slog.String("payment_id", result.paymentID),
+				slog.String("trace_id", result.traceID),
 				slog.String("topic", record.Topic),
 				slog.Int("partition", int(record.Partition)),
 				slog.Int64("offset", record.Offset),
@@ -125,6 +165,8 @@ type handleResult struct {
 	disposition string
 	eventID     string
 	paymentID   string
+	traceID     string
+	decisionAt  time.Time
 }
 
 func (w *Worker) handle(ctx context.Context, record SourceRecord) (handleResult, error) {
@@ -149,6 +191,8 @@ func (w *Worker) handle(ctx context.Context, record SourceRecord) (handleResult,
 			disposition: dispositionRejected,
 			eventID:     event.EventID,
 			paymentID:   event.Payload.PaymentID,
+			traceID:     event.TraceID,
+			decisionAt:  event.Payload.DecisionAt,
 		}, nil
 	}
 
@@ -160,6 +204,8 @@ func (w *Worker) handle(ctx context.Context, record SourceRecord) (handleResult,
 		disposition: disposition,
 		eventID:     event.EventID,
 		paymentID:   event.Payload.PaymentID,
+		traceID:     event.TraceID,
+		decisionAt:  event.Payload.DecisionAt,
 	}, nil
 }
 

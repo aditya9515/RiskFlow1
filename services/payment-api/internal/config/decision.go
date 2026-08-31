@@ -13,20 +13,23 @@ const (
 	defaultDecisionConsumerGroup  = "riskflow-decision-persistence-v1"
 	defaultDecisionProcessTimeout = 5 * time.Second
 	defaultDecisionRetryBackoff   = time.Second
+	defaultDecisionMetricsAddr    = ":9092"
 	defaultReconciliationGrace    = 30 * time.Second
 	defaultReconciliationTimeout  = 10 * time.Second
 )
 
 // DecisionConsumerConfig contains the persistence worker configuration.
 type DecisionConsumerConfig struct {
-	DatabaseURL     string
-	KafkaBrokers    []string
-	Topic           string
-	ConsumerGroup   string
-	AutoOffsetReset string
-	ProcessTimeout  time.Duration
-	RetryBackoff    time.Duration
-	LogLevel        slog.Level
+	DatabaseURL            string
+	KafkaBrokers           []string
+	Topic                  string
+	ConsumerGroup          string
+	AutoOffsetReset        string
+	ProcessTimeout         time.Duration
+	RetryBackoff           time.Duration
+	MetricsAddr            string
+	MetricsShutdownTimeout time.Duration
+	LogLevel               slog.Level
 }
 
 // ReconcilerConfig contains the one-shot reconciliation job configuration.
@@ -70,20 +73,30 @@ func loadDecisionConsumer(lookup lookupEnv) (DecisionConsumerConfig, error) {
 	if err != nil {
 		return DecisionConsumerConfig{}, err
 	}
+	metricsAddr := strings.TrimSpace(value(lookup, "DECISION_METRICS_ADDR", defaultDecisionMetricsAddr))
+	if err := validateHTTPAddr(metricsAddr); err != nil {
+		return DecisionConsumerConfig{}, fmt.Errorf("DECISION_METRICS_ADDR: %w", err)
+	}
+	metricsShutdownTimeout, err := duration(lookup, "METRICS_SHUTDOWN_TIMEOUT", defaultMetricsShutdown)
+	if err != nil {
+		return DecisionConsumerConfig{}, err
+	}
 	logLevel, err := parseLogLevel(value(lookup, "LOG_LEVEL", "info"))
 	if err != nil {
 		return DecisionConsumerConfig{}, err
 	}
 
 	return DecisionConsumerConfig{
-		DatabaseURL:     databaseURL,
-		KafkaBrokers:    brokers,
-		Topic:           topic,
-		ConsumerGroup:   group,
-		AutoOffsetReset: autoOffsetReset,
-		ProcessTimeout:  processTimeout,
-		RetryBackoff:    retryBackoff,
-		LogLevel:        logLevel,
+		DatabaseURL:            databaseURL,
+		KafkaBrokers:           brokers,
+		Topic:                  topic,
+		ConsumerGroup:          group,
+		AutoOffsetReset:        autoOffsetReset,
+		ProcessTimeout:         processTimeout,
+		RetryBackoff:           retryBackoff,
+		MetricsAddr:            metricsAddr,
+		MetricsShutdownTimeout: metricsShutdownTimeout,
+		LogLevel:               logLevel,
 	}, nil
 }
 

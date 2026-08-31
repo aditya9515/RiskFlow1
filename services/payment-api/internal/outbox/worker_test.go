@@ -18,6 +18,19 @@ type capturingPublisher struct {
 	calls   int
 }
 
+type capturingMetrics struct {
+	publishResults []string
+	retries        []string
+}
+
+func (m *capturingMetrics) ObservePublish(result string, _ time.Duration) {
+	m.publishResults = append(m.publishResults, result)
+}
+
+func (m *capturingMetrics) IncrementRetry(stage string) {
+	m.retries = append(m.retries, stage)
+}
+
 func (p *capturingPublisher) Publish(_ context.Context, message Message) error {
 	p.calls++
 	p.message = message
@@ -57,7 +70,8 @@ func TestWorkerPublishesVersionedMessage(t *testing.T) {
 	t.Parallel()
 
 	publisher := &capturingPublisher{}
-	worker, err := NewWorker(&scriptedStore{}, publisher, validWorkerConfig(), discardOutboxLogger())
+	metrics := &capturingMetrics{}
+	worker, err := NewWorker(&scriptedStore{}, publisher, validWorkerConfig(), discardOutboxLogger(), metrics)
 	if err != nil {
 		t.Fatalf("new worker: %v", err)
 	}
@@ -80,6 +94,9 @@ func TestWorkerPublishesVersionedMessage(t *testing.T) {
 	if len(publisher.message.Headers) != 4 || publisher.message.Headers[0].Value != event.ID {
 		t.Fatalf("unexpected headers: %+v", publisher.message.Headers)
 	}
+	if !slices.Equal(metrics.publishResults, []string{"success"}) {
+		t.Fatalf("publish metrics = %v", metrics.publishResults)
+	}
 }
 
 func TestWorkerUsesBoundedBackoffAndStopsOnCancellation(t *testing.T) {
@@ -101,6 +118,8 @@ func TestWorkerUsesBoundedBackoffAndStopsOnCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new worker: %v", err)
 	}
+	metrics := &capturingMetrics{}
+	worker.metrics = metrics
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -122,6 +141,9 @@ func TestWorkerUsesBoundedBackoffAndStopsOnCancellation(t *testing.T) {
 	}
 	if publisher.calls != 1 {
 		t.Fatalf("publish calls = %d, want 1", publisher.calls)
+	}
+	if !slices.Equal(metrics.retries, []string{"delivery", "delivery", "delivery"}) {
+		t.Fatalf("retry metrics = %v", metrics.retries)
 	}
 }
 

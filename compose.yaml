@@ -107,6 +107,7 @@ services:
       PAYMENT_CREATE_TIMEOUT: ${PAYMENT_CREATE_TIMEOUT:-3s}
       REVIEW_REQUEST_TIMEOUT: ${REVIEW_REQUEST_TIMEOUT:-3s}
       DASHBOARD_REQUEST_TIMEOUT: ${DASHBOARD_REQUEST_TIMEOUT:-5s}
+      METRICS_COLLECTION_TIMEOUT: ${METRICS_COLLECTION_TIMEOUT:-1s}
       RECONCILIATION_GRACE_PERIOD: ${RECONCILIATION_GRACE_PERIOD:-30s}
       REVIEW_AUTH_CREDENTIALS_JSON: ${REVIEW_AUTH_CREDENTIALS_JSON}
       SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-10s}
@@ -160,12 +161,22 @@ services:
       OUTBOX_PUBLISH_TIMEOUT: ${OUTBOX_PUBLISH_TIMEOUT:-5s}
       OUTBOX_RETRY_MIN_BACKOFF: ${OUTBOX_RETRY_MIN_BACKOFF:-100ms}
       OUTBOX_RETRY_MAX_BACKOFF: ${OUTBOX_RETRY_MAX_BACKOFF:-5s}
+      OUTBOX_METRICS_ADDR: ${OUTBOX_METRICS_ADDR:-:9091}
+      METRICS_SHUTDOWN_TIMEOUT: ${METRICS_SHUTDOWN_TIMEOUT:-5s}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    expose:
+      - "9091"
     depends_on:
       migrate:
         condition: service_completed_successfully
       kafka-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:9091/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   risk-service:
     build:
@@ -217,12 +228,22 @@ services:
       DECISION_AUTO_OFFSET_RESET: ${DECISION_AUTO_OFFSET_RESET:-earliest}
       DECISION_PROCESS_TIMEOUT: ${DECISION_PROCESS_TIMEOUT:-5s}
       DECISION_RETRY_BACKOFF: ${DECISION_RETRY_BACKOFF:-1s}
+      DECISION_METRICS_ADDR: ${DECISION_METRICS_ADDR:-:9092}
+      METRICS_SHUTDOWN_TIMEOUT: ${METRICS_SHUTDOWN_TIMEOUT:-5s}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    expose:
+      - "9092"
     depends_on:
       migrate:
         condition: service_completed_successfully
       kafka-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:9092/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   decision-reconciler:
     profiles: ["tools"]

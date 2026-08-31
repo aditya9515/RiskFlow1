@@ -30,6 +30,9 @@ func TestLoadPublisherValidDefaults(t *testing.T) {
 	if cfg.RetryMin != 100*time.Millisecond || cfg.RetryMax != 5*time.Second {
 		t.Fatalf("retry min/max = %s/%s", cfg.RetryMin, cfg.RetryMax)
 	}
+	if cfg.MetricsAddr != ":9091" || cfg.MetricsShutdownTimeout != 5*time.Second {
+		t.Fatalf("metrics addr/shutdown = %q/%s", cfg.MetricsAddr, cfg.MetricsShutdownTimeout)
+	}
 }
 
 func TestLoadPublisherRejectsInvalidConfiguration(t *testing.T) {
@@ -47,6 +50,8 @@ func TestLoadPublisherRejectsInvalidConfiguration(t *testing.T) {
 		{name: "invalid topic", overrides: map[string]string{"KAFKA_TOPIC": "payments created"}, wantError: "KAFKA_TOPIC"},
 		{name: "invalid poll", overrides: map[string]string{"OUTBOX_POLL_INTERVAL": "0s"}, wantError: "OUTBOX_POLL_INTERVAL"},
 		{name: "invalid timeout", overrides: map[string]string{"OUTBOX_PUBLISH_TIMEOUT": "soon"}, wantError: "OUTBOX_PUBLISH_TIMEOUT"},
+		{name: "invalid metrics address", overrides: map[string]string{"OUTBOX_METRICS_ADDR": "9091"}, wantError: "OUTBOX_METRICS_ADDR"},
+		{name: "invalid metrics shutdown", overrides: map[string]string{"METRICS_SHUTDOWN_TIMEOUT": "0s"}, wantError: "METRICS_SHUTDOWN_TIMEOUT"},
 		{name: "reversed retry bounds", overrides: map[string]string{
 			"OUTBOX_RETRY_MIN_BACKOFF": "2s",
 			"OUTBOX_RETRY_MAX_BACKOFF": "1s",

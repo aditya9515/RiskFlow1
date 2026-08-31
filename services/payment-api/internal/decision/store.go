@@ -18,6 +18,7 @@ type SourceRecord struct {
 	Partition   int32
 	Offset      int64
 	LeaderEpoch int32
+	Lag         int64
 	Value       []byte
 }
 

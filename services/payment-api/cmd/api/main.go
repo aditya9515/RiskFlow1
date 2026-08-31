@@ -12,6 +12,7 @@ import (
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/database"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/decision"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/httpapi"
+	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/observability"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/payment"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/review"
 	"github.com/aditya9515/RiskFlow1/services/payment-api/internal/server"
@@ -64,7 +65,10 @@ func run() int {
 		return 1
 	}
 	cfg.ReviewCredentials = nil
-	handler := httpapi.NewHandler(
+	registry := observability.NewRegistry("payment-api")
+	httpMetrics := observability.NewHTTPMetrics(registry)
+	registry.MustRegister(observability.NewPostgresCollector(pool, cfg.MetricsTimeout, logger))
+	handler := httpapi.NewHandlerWithMetrics(
 		pool,
 		paymentService,
 		reviewService,
@@ -74,8 +78,10 @@ func run() int {
 		cfg.PaymentTimeout,
 		cfg.ReviewTimeout,
 		cfg.DashboardTimeout,
+		observability.Handler(registry),
 		logger,
 	)
+	handler = httpMetrics.Middleware(handler, logger)
 	httpServer := server.New(cfg.HTTPAddr, handler, cfg.ShutdownTimeout, logger)
 
 	logger.Info("starting payment API", slog.String("address", cfg.HTTPAddr))
