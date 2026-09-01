@@ -2,6 +2,31 @@
 
 RiskFlow is a real-time payment risk and ML decisioning platform. The payment core provides validated, idempotent payment creation backed by a PostgreSQL transaction and transactional outbox. A Python worker consumes those events, maintains online Redis features, combines deterministic rules with a versioned XGBoost model, and publishes explainable risk decisions.
 
+```mermaid
+flowchart LR
+    client[Payment client] --> api[Go payment API]
+    api -->|payment + outbox| postgres[(PostgreSQL)]
+    postgres --> publisher[Outbox publisher]
+    publisher -->|payments.created| kafka[(Kafka)]
+    kafka --> risk[Python rules + XGBoost]
+    risk <--> redis[(Redis features)]
+    risk -->|risk.decisions| kafka
+    kafka --> consumer[Decision consumer]
+    consumer --> postgres
+    kafka --> spark[Spark streaming]
+    spark --> parquet[(Parquet + checkpoints)]
+    postgres --> dashboard[Next.js operations dashboard]
+```
+
+Detailed guides:
+
+- [system architecture and reliability boundaries](docs/architecture.md);
+- [database diagram and transaction boundaries](docs/database.md);
+- [PowerShell API examples](docs/api-examples.md);
+- [failure behavior and measured recovery evidence](docs/reliability.md);
+- [two-minute recruiter and five-minute technical demos](docs/demo.md);
+- [reproducible tests and benchmarks](docs/benchmarks.md).
+
 ## Requirements
 
 - Docker Desktop with Linux containers
@@ -201,7 +226,7 @@ See [manual-review controls](docs/manual-review-controls.md) for roles, endpoint
 
 ## Operational dashboard API
 
-The role-protected `GET /v1/dashboard` endpoint exposes one bounded, read-only operational snapshot for the future Next.js dashboard. It includes payment totals/statuses, automated decision counts and average score, recent decisions and reason codes, pending manual reviews, outbox and decision-ingestion failures, reconciliation counts, and the most recently used rule/model versions.
+The role-protected `GET /v1/dashboard` endpoint exposes one bounded, read-only operational snapshot for the Next.js dashboard. It includes payment totals/statuses, automated decision counts and average score, recent decisions and reason codes, pending manual reviews, outbox and decision-ingestion failures, reconciliation counts, and the most recently used rule/model versions.
 
 ```powershell
 $auditorToken = "your_local_auditor_token"
@@ -241,6 +266,16 @@ docker compose run --rm --no-deps `
 ```
 
 See [streaming analytics](docs/streaming-analytics.md) for schemas, partitions, checkpoint semantics, recovery limits, and verification commands.
+
+## Generate demo payments
+
+With the default `.env.example` thresholds and pinned model, create one `ALLOWED`, one `REVIEW`, and one `BLOCKED` payment through the public API:
+
+```powershell
+& .\scripts\generate-demo-payments.ps1
+```
+
+The script waits for asynchronous decisions and prints structured JSON containing the payment IDs and outcomes. Supplying the same `-RunId` again safely replays the original three payments instead of inserting duplicates. It never deletes operational data. See [the demo guide](docs/demo.md) for the interview walkthrough and pre-demo checks.
 
 ## Reproducible measurements
 

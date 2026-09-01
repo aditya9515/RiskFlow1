@@ -1,6 +1,6 @@
 # Operational dashboard API
 
-Checkpoint 6A establishes the read-only PostgreSQL contract for the operational dashboard. The Next.js interface is intentionally deferred to Checkpoint 6B so it can consume a tested, stable response instead of embedding database assumptions in the browser.
+Checkpoint 6A established the read-only PostgreSQL contract consumed by the Next.js interface implemented in Checkpoint 6B. Keeping the contract separate prevents the browser-facing service from embedding database assumptions.
 
 ## Endpoint and access
 
