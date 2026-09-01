@@ -25,7 +25,9 @@ Detailed guides:
 - [PowerShell API examples](docs/api-examples.md);
 - [failure behavior and measured recovery evidence](docs/reliability.md);
 - [two-minute recruiter and five-minute technical demos](docs/demo.md);
-- [reproducible tests and benchmarks](docs/benchmarks.md).
+- [reproducible tests and benchmarks](docs/benchmarks.md);
+- [Goldman Sachs technical interview pack](docs/interview-pack.md);
+- [evidence-backed resume bullets](docs/resume.md).
 
 ## Requirements
 
