@@ -23,13 +23,13 @@ Do not reset Docker volumes immediately before an interview. A warm, already ver
 
 ### 0:00–0:20 — problem
 
-“RiskFlow is a real-time payment-risk platform I built to demonstrate the path from safe payment acceptance to an explainable automated decision. The design focuses on the things that matter in financial systems: duplicate protection, durable events, audit evidence, graceful failure, and measurable behavior.”
+“RiskFlow is a real-time payment-risk platform that takes a payment from safe acceptance to an explainable decision. It focuses on financial-system essentials: duplicate protection, durable events, audit evidence, graceful failure, and measured behavior.”
 
 ### 0:20–0:45 — architecture
 
 Show the [system diagram](architecture.md).
 
-“The Go API validates and stores a payment with an outbox event in one PostgreSQL transaction. A separate worker publishes the event to Kafka. The Python service combines deterministic rules, Redis velocity features, and a versioned XGBoost model. A Go consumer then stores the decision, status change, audit event, and any manual-review work atomically.”
+“The Go API stores a validated payment and outbox event in one PostgreSQL transaction. A worker publishes to Kafka; a Python service combines rules, Redis velocity features, and versioned XGBoost scoring. A Go consumer atomically persists the decision, status, audit evidence, and manual-review work.”
 
 ### 0:45–1:20 — live outcomes
 
@@ -37,13 +37,13 @@ Show the [system diagram](architecture.md).
 & .\scripts\generate-demo-payments.ps1 -RunId $demoRun
 ```
 
-“This creates one low-risk payment, one high-amount review, and one extreme-amount block. The API initially returns `PENDING_RISK`; the script follows each record until its asynchronous final state. The same run ID can be repeated safely because the idempotency keys return the original payment IDs.”
+“This creates allow, review, and block scenarios, then waits for their asynchronous final states. Repeating the same run is safe: its idempotency keys return the original payment IDs.”
 
 Refresh the dashboard and point to payment totals, allow/review/block distribution, the pending manual-review count, recent reason codes, model version, and processing/reconciliation indicators.
 
 ### 1:20–1:45 — reliability
 
-“Kafka can be unavailable without losing an accepted payment because the unpublished event stays in PostgreSQL. Duplicate HTTP calls and Kafka redelivery are expected and deduplicated. If Redis is unavailable, risk processing pauses rather than inventing velocity data. If the ML artifact is unavailable, uncertain payments move to review.”
+“Kafka outages do not lose accepted payments; unpublished events stay in PostgreSQL. HTTP retries and Kafka redelivery are deduplicated. Redis failure pauses risk processing rather than fabricating velocity data, while a missing ML artifact routes uncertainty to review.”
 
 ### 1:45–2:00 — evidence
 

@@ -27,7 +27,8 @@ Detailed guides:
 - [two-minute recruiter and five-minute technical demos](docs/demo.md);
 - [reproducible tests and benchmarks](docs/benchmarks.md);
 - [Goldman Sachs technical interview pack](docs/interview-pack.md);
-- [evidence-backed resume bullets](docs/resume.md).
+- [evidence-backed resume bullets](docs/resume.md);
+- [final rehearsal evidence and project-freeze runbook](docs/project-freeze.md).
 
 ## Requirements
 
