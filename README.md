@@ -242,6 +242,21 @@ docker compose run --rm --no-deps `
 
 See [streaming analytics](docs/streaming-analytics.md) for schemas, partitions, checkpoint semantics, recovery limits, and verification commands.
 
+## Reproducible measurements
+
+Run the bounded payment acceptance harness against a ready local stack:
+
+```powershell
+& .\scripts\measure-payment-api.ps1 `
+    -Requests 250 `
+    -Concurrency 25 `
+    -Mode Unique
+
+& .\scripts\verify-payment-e2e.ps1
+```
+
+The checked-in report contains the exact local environment, per-service test coverage, three load samples, concurrent retry verification, database row counts, and stored event-delay percentiles. These are local measurements rather than production claims. See [reproducible measurements](docs/benchmarks.md).
+
 Run Python verification directly:
 
 ```powershell

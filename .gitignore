@@ -6,6 +6,9 @@
 # Go build, test, and coverage artifacts
 bin/
 coverage.out
+coverage/
+.coverage
+htmlcov/
 *.test
 
 # Local caches

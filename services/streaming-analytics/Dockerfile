@@ -30,8 +30,8 @@ ENTRYPOINT ["/opt/riskflow/entrypoint.sh"]
 FROM runtime AS test
 
 USER root
-RUN python3 -m pip install --no-cache-dir pytest==9.1.1 ruff==0.16.5
+RUN python3 -m pip install --no-cache-dir coverage==7.15.4 pytest==9.1.1 ruff==0.16.5
 USER spark
 
 ENTRYPOINT []
-CMD ["bash", "-lc", "python3 -m ruff format --check /opt/riskflow && python3 -m ruff check /opt/riskflow && python3 -m pytest -q /opt/riskflow/tests"]
+CMD ["bash", "-lc", "python3 -m ruff format --check /opt/riskflow && python3 -m ruff check /opt/riskflow && python3 -m coverage run --branch --source=/opt/riskflow/src/streaming_analytics -m pytest -q /opt/riskflow/tests && python3 -m coverage report --show-missing"]
