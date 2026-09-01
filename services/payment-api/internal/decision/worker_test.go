@@ -131,9 +131,33 @@ func TestWorkerReturnsCommitFailureForProcessRestart(t *testing.T) {
 	}
 }
 
+func TestWorkerContinuesAfterBoundedEmptyPoll(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	consumer := &timeoutThenRecordConsumer{commit: cancel}
+	store := &fakeStore{apply: func() (ApplyResult, error) {
+		return ApplyResult{Applied: true}, nil
+	}}
+	worker := newTestWorker(t, consumer, store)
+	metrics := &capturingDecisionMetrics{}
+	worker.metrics = metrics
+
+	if err := worker.Run(ctx); err != nil {
+		t.Fatalf("run worker: %v", err)
+	}
+	if consumer.pollCalls < 2 || consumer.commitCalls != 1 {
+		t.Fatalf("poll/commit calls = %d/%d", consumer.pollCalls, consumer.commitCalls)
+	}
+	if len(metrics.retries) != 0 {
+		t.Fatalf("normal poll timeouts recorded as retries: %v", metrics.retries)
+	}
+}
+
 func newTestWorker(t *testing.T, consumer Consumer, store Store) *Worker {
 	t.Helper()
 	worker, err := NewWorker(consumer, store, WorkerConfig{
+		PollTimeout:    time.Millisecond,
 		ProcessTimeout: time.Second,
 		RetryBackoff:   time.Millisecond,
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -193,6 +217,30 @@ func (c *fakeConsumer) Commit(context.Context, SourceRecord) error {
 
 func (c *fakeConsumer) AllowRebalance() { c.allowCalls++ }
 func (c *fakeConsumer) Close()          { c.closeCalls++ }
+
+type timeoutThenRecordConsumer struct {
+	pollCalls   int
+	commitCalls int
+	commit      func()
+}
+
+func (c *timeoutThenRecordConsumer) Poll(ctx context.Context) (SourceRecord, error) {
+	c.pollCalls++
+	if c.pollCalls == 1 {
+		<-ctx.Done()
+		return SourceRecord{}, ctx.Err()
+	}
+	return validSourceRecord(), nil
+}
+
+func (c *timeoutThenRecordConsumer) Commit(context.Context, SourceRecord) error {
+	c.commitCalls++
+	c.commit()
+	return nil
+}
+
+func (c *timeoutThenRecordConsumer) AllowRebalance() {}
+func (c *timeoutThenRecordConsumer) Close()          {}
 
 type fakeStore struct {
 	apply         func() (ApplyResult, error)

@@ -16,6 +16,10 @@ class ModelArtifactError(ValueError):
     """Raised when a model and its metadata do not form a valid artifact."""
 
 
+class ModelScoringError(RuntimeError):
+    """Raised when a loaded model cannot score a payment safely."""
+
+
 @dataclass(frozen=True)
 class ModelScore:
     probability: float
@@ -26,6 +30,13 @@ class ModelScore:
 
 class RiskModel(Protocol):
     def score(self, payment: PaymentCreatedPayload, features: FeatureSnapshot) -> ModelScore: ...
+
+
+class UnavailableRiskModel:
+    """Signals that model inference is unavailable so policy can fail safely."""
+
+    def score(self, _payment: PaymentCreatedPayload, _features: FeatureSnapshot) -> ModelScore:
+        raise ModelScoringError("risk model is unavailable")
 
 
 class XGBoostRiskModel:
@@ -58,13 +69,16 @@ class XGBoostRiskModel:
         return self._review_threshold
 
     def score(self, payment: PaymentCreatedPayload, features: FeatureSnapshot) -> ModelScore:
-        matrix = xgb.DMatrix(
-            transform_payment(payment, features), feature_names=list(FEATURE_NAMES)
-        )
-        prediction = self._booster.predict(
-            matrix,
-            iteration_range=(0, self._best_iteration + 1),
-        )
+        try:
+            matrix = xgb.DMatrix(
+                transform_payment(payment, features), feature_names=list(FEATURE_NAMES)
+            )
+            prediction = self._booster.predict(
+                matrix,
+                iteration_range=(0, self._best_iteration + 1),
+            )
+        except Exception as error:
+            raise ModelScoringError("XGBoost scoring failed") from error
         probability = float(prediction[0])
         return ModelScore(
             probability=probability,

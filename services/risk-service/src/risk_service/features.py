@@ -3,14 +3,19 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from typing import Protocol
+from uuid import UUID
 
 from redis import Redis
 
-from risk_service.models import FeatureSnapshot, PaymentCreatedEnvelope
+from risk_service.models import FeatureSnapshot, PaymentCreatedEnvelope, RiskDecisionEnvelope
 
 
 class FeatureStore(Protocol):
+    def load_decision(self, event_id: UUID) -> RiskDecisionEnvelope | None: ...
+
     def observe(self, event: PaymentCreatedEnvelope, decision_at: datetime) -> FeatureSnapshot: ...
+
+    def save_decision(self, decision: RiskDecisionEnvelope) -> RiskDecisionEnvelope: ...
 
 
 class RedisFeatureStore:
@@ -51,6 +56,15 @@ redis.call('EXPIRE', KEYS[4], tonumber(ARGV[8]))
 return snapshot
 """
 
+    _CACHE_DECISION_SCRIPT = """
+local cached = redis.call('GET', KEYS[1])
+if cached then
+    return cached
+end
+redis.call('SETEX', KEYS[1], tonumber(ARGV[1]), ARGV[2])
+return ARGV[2]
+"""
+
     def __init__(
         self,
         client: Redis,
@@ -65,10 +79,17 @@ return snapshot
         self._event_cache_ttl_seconds = event_cache_ttl_seconds
         self._feature_state_ttl_seconds = feature_state_ttl_seconds
         self._observe_script = client.register_script(self._OBSERVE_SCRIPT)
+        self._cache_decision_script = client.register_script(self._CACHE_DECISION_SCRIPT)
 
     def ping(self) -> None:
         if not self._client.ping():
             raise ConnectionError("Redis PING did not return true")
+
+    def load_decision(self, event_id: UUID) -> RiskDecisionEnvelope | None:
+        encoded = self._client.get(self._decision_key(event_id))
+        if encoded is None:
+            return None
+        return RiskDecisionEnvelope.model_validate_json(encoded)
 
     def observe(self, event: PaymentCreatedEnvelope, decision_at: datetime) -> FeatureSnapshot:
         payment = event.payload
@@ -98,6 +119,16 @@ return snapshot
         if isinstance(encoded, bytes):
             encoded = encoded.decode("utf-8")
         return FeatureSnapshot.model_validate(json.loads(encoded))
+
+    def save_decision(self, decision: RiskDecisionEnvelope) -> RiskDecisionEnvelope:
+        encoded = self._cache_decision_script(
+            keys=[self._decision_key(decision.payload.source_event_id)],
+            args=(self._event_cache_ttl_seconds, decision.model_dump_json()),
+        )
+        return RiskDecisionEnvelope.model_validate_json(encoded)
+
+    def _decision_key(self, event_id: UUID) -> str:
+        return f"{self._key_prefix}:decision:{event_id}"
 
     def close(self) -> None:
         self._client.close()

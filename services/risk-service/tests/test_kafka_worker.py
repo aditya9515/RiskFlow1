@@ -9,7 +9,7 @@ from typing import Any
 from risk_service.config import Settings
 from risk_service.kafka_worker import RiskWorker
 from risk_service.model import ModelScore
-from risk_service.models import FeatureSnapshot, PaymentCreatedEnvelope
+from risk_service.models import FeatureSnapshot, PaymentCreatedEnvelope, RiskDecisionEnvelope
 from risk_service.processor import DecisionProcessor
 from risk_service.rules import RuleEngine
 
@@ -84,9 +84,18 @@ class FixedFeatureStore:
             baseline_country="IN",
             decision_at=decision_time,
         )
+        self._decision: RiskDecisionEnvelope | None = None
+
+    def load_decision(self, _event_id: object) -> RiskDecisionEnvelope | None:
+        return self._decision
 
     def observe(self, _event: PaymentCreatedEnvelope, _decision_at: datetime) -> FeatureSnapshot:
         return self._snapshot
+
+    def save_decision(self, decision: RiskDecisionEnvelope) -> RiskDecisionEnvelope:
+        if self._decision is None:
+            self._decision = decision
+        return self._decision
 
 
 class FixedRiskModel:

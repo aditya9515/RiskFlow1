@@ -153,6 +153,10 @@ The model was trained on 50,000 reproducible fictional payments with a 60/20/20 
 
 The decision is published to `risk.decisions` before the input Kafka offset is committed. A crash in between can publish a duplicate, so each output uses a deterministic decision `event_id` derived from the input `event_id`; downstream consumers must deduplicate it. Invalid event contracts are published to `risk.invalid-events` before their offsets are committed, preventing a poison record from blocking its partition without silently discarding it.
 
+If the model artifact or runtime scorer is unavailable, rules still execute. A deterministic rules `BLOCK` retains precedence; every other uncertain payment becomes `REVIEW` with reason `ML_UNAVAILABLE` and fallback version `ml-unavailable-review-v1`. The complete decision is cached by source event ID before publication, keeping retries stable across worker restarts and model recovery. Redis failure instead pauses processing without committing the Kafka offset because inventing velocity features would be unsafe.
+
+See [reliability and failure behavior](docs/reliability.md) for the dependency matrix, replay guarantees, recovery boundaries, and reproducible checks.
+
 ## Decision persistence and controls
 
 The Go `risk-decision-consumer` validates schema-v2 `risk.decisions` records and persists each decision, payment status change, system audit event, manual-review entry, and Kafka ingestion receipt in one PostgreSQL transaction. It commits the Kafka offset only after PostgreSQL commits. A replay creates another ingestion receipt but not another decision, audit event, or review item.

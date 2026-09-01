@@ -70,7 +70,9 @@ Measured test cost is `119,400` cost units, or `11,940` per 1,000 synthetic paym
 - Model SHA-256: `3f30aaf2a4a7d720c183bab36439a7d40e92b18f82df9f8134da6fe8be32a111`
 - Metadata SHA-256: `e8a0197adc0e8d0ff64e50dbe8b6daba383eb248bcbbda577691943228309602`
 
-The service verifies the model hash, metadata schema, preprocessing version, and feature ordering before consuming Kafka records. Startup fails rather than silently using an unknown artifact.
+The service verifies the model hash, metadata schema, preprocessing version, and feature ordering before consuming Kafka records. A missing, corrupt, or incompatible artifact does not silently become a different model: the worker starts an explicit manual-review fallback. Rules still run, deterministic `BLOCK` decisions retain precedence, and every otherwise non-blocked payment becomes `REVIEW` with reason `ML_UNAVAILABLE` and model version `ml-unavailable-review-v1`.
+
+The fallback reports model probability and model score as zero because no ML inference occurred. Its final risk score is raised to the configured review threshold as a policy control, not presented as a model prediction. Runtime XGBoost inference errors use the same path. Redis caches the complete decision by source event ID before Kafka publication, so a retry or restart returns the original fallback decision even if the model later recovers.
 
 ## Reproduce training
 

@@ -9,8 +9,27 @@ import pytest
 from conftest import with_event_id
 from redis import Redis
 
+from risk_service.config import Settings
 from risk_service.features import RedisFeatureStore
+from risk_service.model import ModelScore, ModelScoringError
 from risk_service.models import PaymentCreatedEnvelope
+from risk_service.processor import MODEL_FALLBACK_VERSION, DecisionProcessor
+from risk_service.rules import RuleEngine
+
+
+class FailingRiskModel:
+    def score(self, _payment: object, _features: object) -> ModelScore:
+        raise ModelScoringError("model unavailable during inference")
+
+
+class RecoveredRiskModel:
+    def score(self, _payment: object, _features: object) -> ModelScore:
+        return ModelScore(
+            probability=0.01,
+            risk_score=1,
+            review_threshold=0.05,
+            model_version="xgb-recovered-test-v1",
+        )
 
 
 @pytest.mark.integration
@@ -78,6 +97,45 @@ def test_concurrent_duplicate_observations_update_velocity_once(
         assert snapshots[0].velocity_5m == 1
         velocity_key = f"{key_prefix}:customer:customer-1:velocity"
         assert client.zcard(velocity_key) == 1
+    finally:
+        for key in client.scan_iter(f"{key_prefix}:*"):
+            client.delete(key)
+        store.close()
+
+
+@pytest.mark.integration
+def test_cached_fallback_decision_is_stable_after_worker_restart_and_model_recovery(
+    settings: Settings, payment_event: PaymentCreatedEnvelope, decision_time
+) -> None:
+    redis_url = os.getenv("TEST_REDIS_URL")
+    if not redis_url:
+        pytest.skip("TEST_REDIS_URL is not set")
+
+    key_prefix = f"riskflow:test:{uuid4()}"
+    client = Redis.from_url(redis_url, decode_responses=False)
+    store = RedisFeatureStore(client, key_prefix, 300, 3600, 3600)
+    try:
+        unavailable_processor = DecisionProcessor(
+            store,
+            RuleEngine(settings),
+            FailingRiskModel(),
+            fallback_review_score=settings.review_threshold,
+            now=lambda: decision_time,
+        )
+        first = unavailable_processor.process(payment_event)
+
+        recovered_processor = DecisionProcessor(
+            store,
+            RuleEngine(settings),
+            RecoveredRiskModel(),
+            fallback_review_score=settings.review_threshold,
+            now=lambda: decision_time + timedelta(seconds=30),
+        )
+        replay = recovered_processor.process(payment_event)
+
+        assert replay == first
+        assert replay.payload.model_version == MODEL_FALLBACK_VERSION
+        assert client.zcard(f"{key_prefix}:customer:customer-1:velocity") == 1
     finally:
         for key in client.scan_iter(f"{key_prefix}:*"):
             client.delete(key)

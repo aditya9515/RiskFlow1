@@ -19,6 +19,7 @@ type Consumer interface {
 
 // WorkerConfig bounds each database/commit attempt and retry interval.
 type WorkerConfig struct {
+	PollTimeout    time.Duration
 	ProcessTimeout time.Duration
 	RetryBackoff   time.Duration
 }
@@ -53,7 +54,7 @@ func NewWorker(consumer Consumer, store Store, config WorkerConfig, logger *slog
 	if store == nil {
 		return nil, errors.New("decision store is required")
 	}
-	if config.ProcessTimeout <= 0 || config.RetryBackoff <= 0 {
+	if config.PollTimeout <= 0 || config.ProcessTimeout <= 0 || config.RetryBackoff <= 0 {
 		return nil, errors.New("decision worker timeouts must be positive")
 	}
 	if logger == nil {
@@ -84,10 +85,17 @@ func (w *Worker) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		record, err := w.consumer.Poll(ctx)
+		pollCtx, pollCancel := context.WithTimeout(ctx, w.config.PollTimeout)
+		record, err := w.consumer.Poll(pollCtx)
+		pollCancel()
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
+			}
+			// A bounded empty poll is normal. Re-entering Poll also prevents a
+			// broker outage from leaving the worker stuck in one unbounded call.
+			if errors.Is(err, context.DeadlineExceeded) {
+				continue
 			}
 			w.metrics.IncrementRetry("poll")
 			w.logger.ErrorContext(ctx, "poll risk decision", slog.String("error", err.Error()))

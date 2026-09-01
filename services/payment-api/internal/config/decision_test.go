@@ -22,8 +22,8 @@ func TestLoadDecisionConsumerDefaults(t *testing.T) {
 	if cfg.AutoOffsetReset != "earliest" {
 		t.Fatalf("AutoOffsetReset = %q", cfg.AutoOffsetReset)
 	}
-	if cfg.ProcessTimeout != 5*time.Second || cfg.RetryBackoff != time.Second {
-		t.Fatalf("process/retry = %s/%s", cfg.ProcessTimeout, cfg.RetryBackoff)
+	if cfg.PollTimeout != time.Second || cfg.ProcessTimeout != 5*time.Second || cfg.RetryBackoff != time.Second {
+		t.Fatalf("poll/process/retry = %s/%s/%s", cfg.PollTimeout, cfg.ProcessTimeout, cfg.RetryBackoff)
 	}
 	if cfg.MetricsAddr != ":9092" || cfg.MetricsShutdownTimeout != 5*time.Second {
 		t.Fatalf("metrics addr/shutdown = %q/%s", cfg.MetricsAddr, cfg.MetricsShutdownTimeout)
@@ -43,6 +43,7 @@ func TestLoadDecisionConsumerRejectsInvalidValues(t *testing.T) {
 		{name: "topic", overrides: map[string]string{"RISK_DECISIONS_TOPIC": "risk decisions"}, want: "RISK_DECISIONS_TOPIC"},
 		{name: "group", overrides: map[string]string{"DECISION_CONSUMER_GROUP": ".."}, want: "DECISION_CONSUMER_GROUP"},
 		{name: "offset reset", overrides: map[string]string{"DECISION_AUTO_OFFSET_RESET": "middle"}, want: "DECISION_AUTO_OFFSET_RESET"},
+		{name: "poll timeout", overrides: map[string]string{"DECISION_POLL_TIMEOUT": "0s"}, want: "DECISION_POLL_TIMEOUT"},
 		{name: "timeout", overrides: map[string]string{"DECISION_PROCESS_TIMEOUT": "0s"}, want: "DECISION_PROCESS_TIMEOUT"},
 		{name: "retry", overrides: map[string]string{"DECISION_RETRY_BACKOFF": "later"}, want: "DECISION_RETRY_BACKOFF"},
 		{name: "metrics address", overrides: map[string]string{"DECISION_METRICS_ADDR": "9092"}, want: "DECISION_METRICS_ADDR"},

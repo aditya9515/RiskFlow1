@@ -11,6 +11,7 @@ import (
 const (
 	defaultRiskDecisionsTopic     = "risk.decisions"
 	defaultDecisionConsumerGroup  = "riskflow-decision-persistence-v1"
+	defaultDecisionPollTimeout    = time.Second
 	defaultDecisionProcessTimeout = 5 * time.Second
 	defaultDecisionRetryBackoff   = time.Second
 	defaultDecisionMetricsAddr    = ":9092"
@@ -25,6 +26,7 @@ type DecisionConsumerConfig struct {
 	Topic                  string
 	ConsumerGroup          string
 	AutoOffsetReset        string
+	PollTimeout            time.Duration
 	ProcessTimeout         time.Duration
 	RetryBackoff           time.Duration
 	MetricsAddr            string
@@ -65,6 +67,10 @@ func loadDecisionConsumer(lookup lookupEnv) (DecisionConsumerConfig, error) {
 	if autoOffsetReset != "earliest" && autoOffsetReset != "latest" {
 		return DecisionConsumerConfig{}, fmt.Errorf("DECISION_AUTO_OFFSET_RESET must be earliest or latest")
 	}
+	pollTimeout, err := duration(lookup, "DECISION_POLL_TIMEOUT", defaultDecisionPollTimeout)
+	if err != nil {
+		return DecisionConsumerConfig{}, err
+	}
 	processTimeout, err := duration(lookup, "DECISION_PROCESS_TIMEOUT", defaultDecisionProcessTimeout)
 	if err != nil {
 		return DecisionConsumerConfig{}, err
@@ -92,6 +98,7 @@ func loadDecisionConsumer(lookup lookupEnv) (DecisionConsumerConfig, error) {
 		Topic:                  topic,
 		ConsumerGroup:          group,
 		AutoOffsetReset:        autoOffsetReset,
+		PollTimeout:            pollTimeout,
 		ProcessTimeout:         processTimeout,
 		RetryBackoff:           retryBackoff,
 		MetricsAddr:            metricsAddr,

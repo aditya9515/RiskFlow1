@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from risk_service.model import ModelArtifactError, XGBoostRiskModel
+from risk_service.model import (
+    ModelArtifactError,
+    ModelScoringError,
+    UnavailableRiskModel,
+    XGBoostRiskModel,
+)
 from risk_service.models import FeatureSnapshot, PaymentCreatedEnvelope
 
 ARTIFACTS = Path(__file__).parents[1] / "artifacts"
@@ -42,3 +47,19 @@ def test_artifact_checksum_mismatch_is_rejected(workspace_tmp_path: Path) -> Non
 
     with pytest.raises(ModelArtifactError, match="SHA-256"):
         XGBoostRiskModel(MODEL_PATH, invalid_metadata)
+
+
+def test_unavailable_model_exposes_a_typed_scoring_failure(
+    payment_event: PaymentCreatedEnvelope, decision_time
+) -> None:
+    model = UnavailableRiskModel()
+    features = FeatureSnapshot(
+        velocity_5m=1,
+        new_device=False,
+        cross_border=False,
+        baseline_country="IN",
+        decision_at=decision_time,
+    )
+
+    with pytest.raises(ModelScoringError, match="unavailable"):
+        model.score(payment_event.payload, features)

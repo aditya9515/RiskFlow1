@@ -49,6 +49,7 @@ func run() int {
 	registry := observability.NewRegistry("risk-decision-consumer")
 	decisionMetrics := observability.NewDecisionMetrics(registry)
 	worker, err := decision.NewWorker(consumer, store, decision.WorkerConfig{
+		PollTimeout:    cfg.PollTimeout,
 		ProcessTimeout: cfg.ProcessTimeout,
 		RetryBackoff:   cfg.RetryBackoff,
 	}, logger, decisionMetrics)
